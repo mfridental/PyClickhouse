@@ -107,3 +107,7 @@ cur.select("""
 select groupArray(f26[1]) arr from simpletest
 """)
 print cur.fetchone()['arr']
+
+cur.bulkinsert('simpletest', [{'f01': 100,'f02': 101,'f03': 102}], ['f01', 'f02', 'f03', 'f04'], ['UInt8','UInt16','UInt32','UInt64'])
+
+

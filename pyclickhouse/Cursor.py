@@ -96,7 +96,7 @@ class Cursor(object):
         every object property will be inserted, if fields parameter is not passed. You cannot mix dictionaries
         and objects in the values list.
         :param fields: optional list of fields to insert. Fields correspond to keys of dictionaries or properties of
-        objects passed in the values parameter.
+        objects passed in the values parameter. If some dictionary doesn't have that key, a None value will be assumed
         :param types: optional list of strings representing Clickhouse types of corresponding fields, to ensure proper
         escaping. If omitted, the types will be inferred automatically from the first element of the values list.
         """

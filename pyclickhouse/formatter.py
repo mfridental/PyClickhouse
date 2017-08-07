@@ -5,7 +5,10 @@ class DictionaryAdapter(object):
         return dict.keys()
 
     def getval(self, dict, field):
-        return dict[field]
+        if field in dict:
+            return dict[field]
+        else:
+            return None
 
 class ObjectAdapter(object):
     def getfields(self, obj):
