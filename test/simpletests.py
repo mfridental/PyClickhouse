@@ -6,17 +6,17 @@ conn = Connection('localhost', 8123)
 conn.open()
 cur = conn.cursor()
 
-cur.execute('select count() from system.tables FORMAT TabSeparatedWithNamesAndTypes')
+cur.select('select count() from system.tables')
 print cur.fetchall()
 
-cur.execute('select * from system.tables FORMAT TabSeparatedWithNamesAndTypes')
+cur.select('select * from system.tables ')
 print len(cur.fetchall())
 
-cur.execute("""
+cur.ddl("""
 drop table if exists simpletest
 """)
 
-cur.execute("""
+cur.ddl("""
 create table simpletest (
 f01 UInt8,
 f02 UInt16,
@@ -48,11 +48,11 @@ f26 Array(DateTime)
 engine=Memory
 """)
 
-cur.execute('select count() from system.tables FORMAT TabSeparatedWithNamesAndTypes')
+cur.select('select count() from system.tables')
 print cur.fetchone()['count()'] == 18
 
 
-cur.execute("""
+cur.insert("""
 insert into simpletest values
 (
 1,2,3,4,5,6,7,8,9.99, 10.10, 'abcdeföäüß', '1975-11-10', '1975-11-10 02:23:01',
@@ -63,7 +63,7 @@ insert into simpletest values
 )
 """)
 
-cur.execute("""select count() from simpletest  FORMAT TabSeparatedWithNamesAndTypes""")
+cur.select("""select count() from simpletest """)
 print cur.fetchone()['count()'] == 1
 
 
@@ -93,8 +93,8 @@ values = [
         'f22': [109.99],
         'f23': [111.11],
         'f24': ['string in array'],
-        'f25': ['1975-11-10'],
-        'f26': ['1975-11-10 02:23:01']
+        'f25': [dt.date.today()],
+        'f26': [dt.datetime.now()]
     }]
 
 values = values * 10000
@@ -102,3 +102,8 @@ values = values * 10000
 start = dt.datetime.now()
 cur.bulkinsert('simpletest', values)
 print 10000.0 / (dt.datetime.now() - start).total_seconds()
+
+cur.select("""
+select groupArray(f26[1]) arr from simpletest
+""")
+print cur.fetchone()['arr']

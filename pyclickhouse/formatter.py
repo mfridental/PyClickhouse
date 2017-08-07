@@ -108,10 +108,18 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
         if type in ['Float32', 'Float64']:
             return float(value)
         if type == 'Date':
+            if value.startswith("'"):
+                value = value[1:]
+            if value.endswith("'"):
+                value = value[:-1]
             if value == '0000-00-00':
                 return None
             return dt.datetime.strptime(value, '%Y-%m-%d').date()
         if type == 'DateTime':
+            if value.startswith("'"):
+                value = value[1:]
+            if value.endswith("'"):
+                value = value[:-1]
             if value == '0000-00-00 00:00:00':
                 return None
             return dt.datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
