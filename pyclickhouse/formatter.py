@@ -99,6 +99,8 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
             else:
                 return escaped
         if 'Array' in type:
+            if value is None:
+                return '[]'
             return '[%s]' % ','.join([self.formatfield(x, type[6:-1], True) for x in value])
         raise Exception('Unexpected error, field cannot be formatted, %s, %s' % (str(value), type))
 

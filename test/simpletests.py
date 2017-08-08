@@ -110,4 +110,6 @@ print cur.fetchone()['arr']
 
 cur.bulkinsert('simpletest', [{'f01': 100,'f02': 101,'f03': 102}], ['f01', 'f02', 'f03', 'f04'], ['UInt8','UInt16','UInt32','UInt64'])
 
+cur.bulkinsert('simpletest', [{}], ['f14'], ['Array(UInt8)'])
+
 
