@@ -60,7 +60,20 @@ class Connection(object):
         try:
             if query is None:
                 return Connection.Session.get('http://%s:%s' % (self.host, self.port))
-            url = 'http://%s:%s?query=%s&user=%s&password=%s' % \
+
+            if payload is None:
+                url = 'http://%s:%s?user=%s&password=%s' % \
+                                    (
+                                        self.host,
+                                        str(self.port),
+                                        urllib.quote_plus(self.username),
+                                        urllib.quote_plus(self.password)
+                                    )
+                if isinstance(query, unicode):
+                    query = query.encode('utf8')
+                r = Connection.Session.post(url, query)
+            else:
+                url = 'http://%s:%s?query=%s&user=%s&password=%s' % \
                                     (
                                         self.host,
                                         str(self.port),
@@ -68,9 +81,6 @@ class Connection(object):
                                         urllib.quote_plus(self.username),
                                         urllib.quote_plus(self.password)
                                     )
-            if payload is None:
-                r = Connection.Session.post(url)
-            else:
                 if isinstance(payload, unicode):
                     payload = payload.encode('utf8')
                 r = Connection.Session.post(url, payload)
