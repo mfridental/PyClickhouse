@@ -73,7 +73,7 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
             else:
                 escaped =  value.replace('\\','\\\\').replace('\n','\\n').replace('\t','\\t')
             if inarray:
-                return "'%s'" % escaped
+                return "'%s'" % escaped.replace("'", "\\'")
             else:
                 return  escaped
         if type in ['Float32', 'Float64']:
