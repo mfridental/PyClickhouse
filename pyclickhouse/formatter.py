@@ -129,6 +129,8 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
                 return None
             return dt.datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
         if 'Array' in type:
+            if value == '[]':
+                return []
             return [self.unformatfield(x, type[6:-1]) for x in value[1:-1].split(',')]
         raise Exception('Unexpected error, field cannot be unformatted, %s, %s' % (str(value), type))
 
