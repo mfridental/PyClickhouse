@@ -113,6 +113,7 @@ class Cursor(object):
         self.lastresult = self.connection._call(query, payload)
         if parseresult and self.lastresult is not None:
             self.lastparsedresult = self.formatter.unformat(self.lastresult.content)
+            self.lastresult = None # hint GC to free memory
         else:
             self.lastparsedresult = None
         self.rowindex = -1

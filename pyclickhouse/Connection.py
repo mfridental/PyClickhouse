@@ -19,7 +19,7 @@ class Connection(object):
     Pool_connections=1
     Pool_maxsize=10
 
-    def __init__(self, host, port, username='default', password='', pool_connections=1, pool_maxsize=10):
+    def __init__(self, host, port, username='default', password='', pool_connections=1, pool_maxsize=10, clickhouse_settings= ''):
         """
         Create a new Connection object. Because HTTP protocol is used underneath, no real Connection is
         created. The Connection is rather an temporary object to create cursors.
@@ -43,14 +43,22 @@ class Connection(object):
         self.username = username
         self.password = password
         self.state = 'closed'
+        self.clickhouse_settings_encoded = ''
+        if len(clickhouse_settings) > 0:
+            self.clickhouse_settings_encoded = '&' + '&'.join(['%s=%s' % pair for pair in clickhouse_settings])
+
         if Connection.Session is None or pool_connections != Connection.Pool_connections or pool_maxsize != Connection.Pool_maxsize:
-            if Connection.Session is not None:
-                Connection.Session.close()
-            Connection.Session = requests.Session()
-            Connection.Session.mount('http://', HTTPAdapter(pool_connections=pool_connections, pool_maxsize=pool_maxsize))
-            Connection.Session.mount('https://', HTTPAdapter(pool_connections=pool_connections, pool_maxsize=pool_maxsize))
-            Connection.Pool_connections = pool_connections
-            Connection.Pool_maxsize = pool_maxsize
+            Connection.reopensession(pool_connections, pool_maxsize)
+
+    @staticmethod
+    def reopensession(pool_connections=1, pool_maxsize=10):
+        if Connection.Session is not None:
+            Connection.Session.close()
+        Connection.Session = requests.Session()
+        Connection.Session.mount('http://', HTTPAdapter(pool_connections=pool_connections, pool_maxsize=pool_maxsize, max_retries=3))
+        Connection.Session.mount('https://', HTTPAdapter(pool_connections=pool_connections, pool_maxsize=pool_maxsize, max_retries=3))
+        Connection.Pool_connections = pool_connections
+        Connection.Pool_maxsize = pool_maxsize
 
 
     def _call(self, query = None, payload = None):
@@ -62,24 +70,26 @@ class Connection(object):
                 return Connection.Session.get('http://%s:%s' % (self.host, self.port))
 
             if payload is None:
-                url = 'http://%s:%s?user=%s&password=%s' % \
+                url = 'http://%s:%s?user=%s&password=%s%s' % \
                                     (
                                         self.host,
                                         str(self.port),
                                         urllib.quote_plus(self.username),
-                                        urllib.quote_plus(self.password)
+                                        urllib.quote_plus(self.password),
+                                        self.clickhouse_settings_encoded
                                     )
                 if isinstance(query, unicode):
                     query = query.encode('utf8')
                 r = Connection.Session.post(url, query)
             else:
-                url = 'http://%s:%s?query=%s&user=%s&password=%s' % \
+                url = 'http://%s:%s?query=%s&user=%s&password=%s%s' % \
                                     (
                                         self.host,
                                         str(self.port),
                                         urllib.quote_plus(query),
                                         urllib.quote_plus(self.username),
-                                        urllib.quote_plus(self.password)
+                                        urllib.quote_plus(self.password),
+                                        self.clickhouse_settings_encoded
                                     )
                 if isinstance(payload, unicode):
                     payload = payload.encode('utf8')
@@ -89,6 +99,8 @@ class Connection(object):
             return r
         except Exception as e:
             self.close()
+            if 'BadStatusLine' in e.message:
+                Connection.reopensession()
             logging.error(traceback.format_exc())
             raise e
 
