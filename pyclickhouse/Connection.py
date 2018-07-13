@@ -19,7 +19,7 @@ class Connection(object):
     Pool_connections=1
     Pool_maxsize=10
 
-    def __init__(self, host, port, username='default', password='', pool_connections=1, pool_maxsize=10, clickhouse_settings= ''):
+    def __init__(self, host, port, username='default', password='', pool_connections=1, pool_maxsize=10, timeout=5, clickhouse_settings=''):
         """
         Create a new Connection object. Because HTTP protocol is used underneath, no real Connection is
         created. The Connection is rather an temporary object to create cursors.
@@ -43,9 +43,10 @@ class Connection(object):
         self.username = username
         self.password = password
         self.state = 'closed'
+        self.timeout = timeout
         self.clickhouse_settings_encoded = ''
         if len(clickhouse_settings) > 0:
-            self.clickhouse_settings_encoded = '&' + '&'.join(['%s=%s' % pair for pair in clickhouse_settings])
+            self.clickhouse_settings_encoded = '&' + '&'.join(['%s=%s' % pair for pair in clickhouse_settings.items()])
 
         if Connection.Session is None or pool_connections != Connection.Pool_connections or pool_maxsize != Connection.Pool_maxsize:
             Connection.reopensession(pool_connections, pool_maxsize)
@@ -67,7 +68,7 @@ class Connection(object):
         """
         try:
             if query is None:
-                return Connection.Session.get('http://%s:%s' % (self.host, self.port))
+                return Connection.Session.get('http://%s:%s' % (self.host, self.port), timeout = self.timeout)
 
             if payload is None:
                 url = 'http://%s:%s?user=%s&password=%s%s' % \
@@ -80,7 +81,7 @@ class Connection(object):
                                     )
                 if isinstance(query, unicode):
                     query = query.encode('utf8')
-                r = Connection.Session.post(url, query)
+                r = Connection.Session.post(url, query, timeout = self.timeout)
             else:
                 url = 'http://%s:%s?query=%s&user=%s&password=%s%s' % \
                                     (
@@ -93,7 +94,7 @@ class Connection(object):
                                     )
                 if isinstance(payload, unicode):
                     payload = payload.encode('utf8')
-                r = Connection.Session.post(url, payload)
+                r = Connection.Session.post(url, payload, timeout = self.timeout)
             if not r.ok:
                 raise Exception(r.content)
             return r

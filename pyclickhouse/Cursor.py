@@ -1,4 +1,6 @@
 import datetime as dt
+import re
+
 from formatter import TabSeparatedWithNamesAndTypesFormatter
 
 class Cursor(object):
@@ -67,7 +69,7 @@ class Cursor(object):
     You can pass parameters to the queries, by marking their places in the query using %s, for example
     cursor.select('SELECT count() FROM table WHERE field=%s', 123)
         """
-        if 'format' not in query.lower():
+        if re.match (r'^.+?\s+format\s+\w+$', query.lower()) is None:
             query += ' FORMAT TabSeparatedWithNamesAndTypes'
             self.executewithpayload(query, None, True, *args)
         else:

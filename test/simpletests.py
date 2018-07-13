@@ -115,3 +115,4 @@ cur.bulkinsert('simpletest', [{}], ['f14'], ['Array(UInt8)'])
 cur.bulkinsert('simpletest', [{'f11': "can't"}], ['f11'], ['String'])
 
 cur.bulkinsert('simpletest', [{'f24': ["can't"]}], ['f24'], ['Array(String)'])
+
