@@ -81,7 +81,7 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
                 return '0.0'
             return str(value).replace(',','.') # replacing comma to dot to ensure US format
         if type == 'Date':
-            if value is None:
+            if value is None or value <= dt.date(1970,1,2):
                 escaped = '0000-00-00'
             else:
                 escaped = '%04d-%02d-%02d' % (value.year, value.month, value.day)
@@ -90,7 +90,7 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
             else:
                 return escaped
         if type == 'DateTime':
-            if value is None:
+            if value is None or value <= dt.datetime(1970,1,2,0,0,0):
                 escaped = '0000-00-00 00:00:00'
             else:
                 escaped = '%04d-%02d-%02d %02d:%02d:%02d' % (value.year, value.month, value.day, value.hour, value.minute, value.second)
@@ -117,7 +117,7 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
                 value = value[1:]
             if value.endswith("'"):
                 value = value[:-1]
-            if value == '0000-00-00':
+            if value == '0000-00-00' or value == '1970-01-01':
                 return None
             return dt.datetime.strptime(value, '%Y-%m-%d').date()
         if type == 'DateTime':
@@ -125,7 +125,7 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
                 value = value[1:]
             if value.endswith("'"):
                 value = value[:-1]
-            if value == '0000-00-00 00:00:00':
+            if value == '0000-00-00 00:00:00' or value == '1970-01-01 86:28:16':
                 return None
             return dt.datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
         if 'Array' in type:
