@@ -131,7 +131,29 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
         if 'Array' in type:
             if value == '[]':
                 return []
-            return [self.unformatfield(x, type[6:-1]) for x in value[1:-1].split(',')]
+
+            # Handle arrays with strings containing commas, like ['abc','d,ef']
+            parts = []
+            acc = None
+            for part in value[1:-1].split(','):
+                if acc is not None:
+                    if part.rstrip()[-1] == "'":
+                        parts.append(acc + ',' + part)
+                        acc = None
+                    else:
+                        acc += ',' + part
+                    continue
+                if part.lstrip()[0] == "'":
+                    if part.rstrip()[-1] != "'":
+                        acc = part
+                    else:
+                        parts.append(part)
+                else:
+                    parts.append(part)
+            if acc is not None:
+                raise Exception('Cannot deserialize %s' + value)
+
+            return [self.unformatfield(x, type[6:-1]) for x in parts]
         raise Exception('Unexpected error, field cannot be unformatted, %s, %s' % (str(value), type))
 
 
