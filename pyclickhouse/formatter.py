@@ -136,15 +136,21 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
             parts = []
             acc = None
             for part in value[1:-1].split(','):
+                stripped = part.rstrip().lstrip()
+
+                if len(stripped) == 0:
+                    parts.append(part)
+                    continue
+
                 if acc is not None:
-                    if part.rstrip()[-1] == "'":
+                    if stripped[-1] == "'":
                         parts.append(acc + ',' + part)
                         acc = None
                     else:
                         acc += ',' + part
                     continue
-                if part.lstrip()[0] == "'":
-                    if part.rstrip()[-1] != "'":
+                if stripped[0] == "'":
+                    if stripped[-1] != "'":
                         acc = part
                     else:
                         parts.append(part)

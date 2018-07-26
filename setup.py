@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='pyclickhouse',
-      version='0.3.9',
+      version='0.4.0',
       description='Minimalist Clickhouse Python driver with an API roughly resembling Python DB API 2.0 specification.',
       url='https://github.com/Immowelt/PyClickhouse',
       download_url = 'https://github.com/Immowelt/PyClickhouse/archive/0.3.7.tar.gz',
