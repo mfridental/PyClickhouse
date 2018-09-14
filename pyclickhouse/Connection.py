@@ -83,17 +83,17 @@ class Connection(object):
                     query = query.encode('utf8')
                 r = Connection.Session.post(url, query, timeout = self.timeout)
             else:
-                url = 'http://%s:%s?query=%s&user=%s&password=%s%s' % \
+                url = 'http://%s:%s?user=%s&password=%s%s' % \
                                     (
                                         self.host,
                                         str(self.port),
-                                        urllib.quote_plus(query),
                                         urllib.quote_plus(self.username),
                                         urllib.quote_plus(self.password),
                                         self.clickhouse_settings_encoded
                                     )
                 if isinstance(payload, unicode):
                     payload = payload.encode('utf8')
+                payload = query + '\n' + payload
                 r = Connection.Session.post(url, payload, timeout = self.timeout)
             if not r.ok:
                 raise Exception(r.content)
