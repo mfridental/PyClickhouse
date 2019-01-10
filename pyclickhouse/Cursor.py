@@ -2,6 +2,7 @@ import datetime as dt
 import re
 
 from formatter import TabSeparatedWithNamesAndTypesFormatter
+from FilterableCache import FilterableCache
 
 class Cursor(object):
     """
@@ -36,6 +37,7 @@ class Cursor(object):
         self.lastparsedresult = None
         self.formatter = TabSeparatedWithNamesAndTypesFormatter()
         self.rowindex = -1
+        self.cache = FilterableCache()
 
     @staticmethod
     def _escapeparameter(param):
@@ -137,3 +139,26 @@ class Cursor(object):
         """
         return self.lastparsedresult
 
+
+    def cached_select(self, query, filter):
+        """
+        At the first call, execute the query and store its result into a cache, organizing it in a dictionary in the way
+        that rows can be retrieved efficiently, in the case the same fields are used in the filter.
+
+        Return rows according to the filter from the cache.
+        :param query: query to get and cache the values from clickhouse
+        :param filter: a dictionary with keys corresponding to fields. As a value, either a scalar can be passed, or
+        tuple or list, or else a slice can be passed. When scalar is passed, only rows with exact match will be
+        returned. If tuple or list is passed, rows matching any of the passed values will be returned (OR principle).
+        If a slice is passed, it must be either slice of int or of date. In both cases, a range of ints or dates will
+        be created and rows matching the range will be returned.
+        :return: The same as fetchall, a list of dictionaries
+        """
+        keys = sorted(filter.keys())
+        tag = query+''.join(keys)
+
+        if not self.cache.has_dataset(tag):
+            self.select(query)
+            self.cache.add_dataset(tag, keys, self.fetchall())
+
+        return self.cache.select(tag, filter)
