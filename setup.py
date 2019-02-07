@@ -1,5 +1,7 @@
 from setuptools import setup
 
+REQUIRED=['requests']
+
 setup(name='pyclickhouse',
       version='0.3.8',
       description='Minimalist Clickhouse Python driver with an API roughly resembling Python DB API 2.0 specification.',
@@ -11,5 +13,8 @@ setup(name='pyclickhouse',
       author_email='m.fridental@immowelt.de',
       license='Apache2',
       packages=['pyclickhouse'],
+      install_requires=REQUIRED,
+      use_2to3=True,
+      test_suite='test',
       zip_safe=False)
 
