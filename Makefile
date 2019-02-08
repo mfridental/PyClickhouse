@@ -12,4 +12,13 @@ stop:
 build:
 	sh ./build.sh
 
+to_3:
+	rm Pipfile.lock || true
+	pipenv install --dev --python 3
+
+to_2:
+	rm Pipfile.lock || true
+	pipenv install --dev --python 2.7
+
+
 .PHONY: test run stop build

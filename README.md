@@ -47,3 +47,5 @@ Additional targets:
 - `run`: starts the clickhouse container
 - `stop`: stops the clickhouse container
 - `build`: runs the `build.sh` script
+- `to_2`: removes Pipfile.lock and configures the environment to use python 2
+- `to_3`: removes Pipfile.lock and configures the environment to use python 3
