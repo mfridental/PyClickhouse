@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-#from __future__ import print_function
+
 import unittest
 import datetime as dt
 
@@ -12,10 +12,10 @@ class TestSimple(unittest.TestCase):
         cur = conn.cursor()
 
         cur.select('select count() from system.tables')
-        print(cur.fetchall())
+        print((cur.fetchall()))
 
         cur.select('select * from system.tables ')
-        print(len(cur.fetchall()))
+        print((len(cur.fetchall())))
 
         cur.ddl("""
         drop table if exists simpletest
@@ -54,7 +54,7 @@ class TestSimple(unittest.TestCase):
         """)
 
         cur.select('select count() from system.tables')
-        print cur.fetchone()['count()'] == 18
+        print(cur.fetchone()['count()'] == 18)
 
 
         cur.insert("""
@@ -69,7 +69,7 @@ class TestSimple(unittest.TestCase):
         """)
 
         cur.select("""select count() from simpletest """)
-        print cur.fetchone()['count()'] == 1
+        print(cur.fetchone()['count()'] == 1)
 
 
         values = [
@@ -106,12 +106,12 @@ class TestSimple(unittest.TestCase):
 
         start = dt.datetime.now()
         cur.bulkinsert('simpletest', values)
-        print 10000.0 / (dt.datetime.now() - start).total_seconds()
+        print(10000.0 / (dt.datetime.now() - start).total_seconds())
 
         cur.select("""
         select groupArray(f26[1]) arr from simpletest
         """)
-        print cur.fetchone()['arr']
+        print(cur.fetchone()['arr'])
 
         cur.bulkinsert('simpletest', [{'f01': 100,'f02': 101,'f03': 102}], ['f01', 'f02', 'f03', 'f04'], ['UInt8','UInt16','UInt32','UInt64'])
 
