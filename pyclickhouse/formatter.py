@@ -168,7 +168,7 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
 
 
     def unformat(self, payload_b):
-        payload=payload_b.decode()
+        payload = payload_b.decode('utf8')
         payload = payload.split('\n')
         if len(payload) < 3:
             raise Exception('Unexpected error, no result')
