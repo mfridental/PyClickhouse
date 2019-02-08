@@ -59,3 +59,8 @@ docs/_build/
 target/
 
 # Created by .ignore support plugin (hsz.mobi)
+.vscode/
+*.bak
+
+# Don't version Pipfile.lock because project must be compatible with python 2 and 3
+Pipfile.lock
