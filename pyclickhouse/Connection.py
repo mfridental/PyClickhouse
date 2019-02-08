@@ -1,10 +1,17 @@
-import requests
-from requests.adapters import HTTPAdapter
-from Cursor import Cursor
-import urllib
+from builtins import str
+# https://python-future.org/compatible_idioms.html#urllib-module
+from future.standard_library import install_aliases
+install_aliases()
+
+import urllib.request, urllib.parse, urllib.error
 import multiprocessing
 import logging
 import traceback
+
+import requests
+from requests.adapters import HTTPAdapter
+
+from pyclickhouse.Cursor import Cursor
 
 
 class Connection(object):
@@ -46,7 +53,7 @@ class Connection(object):
         self.timeout = timeout
         self.clickhouse_settings_encoded = ''
         if len(clickhouse_settings) > 0:
-            self.clickhouse_settings_encoded = '&' + '&'.join(['%s=%s' % pair for pair in clickhouse_settings.items()])
+            self.clickhouse_settings_encoded = '&' + '&'.join(['%s=%s' % pair for pair in list(clickhouse_settings.items())])
 
         if Connection.Session is None or pool_connections != Connection.Pool_connections or pool_maxsize != Connection.Pool_maxsize:
             Connection.reopensession(pool_connections, pool_maxsize)
@@ -75,11 +82,11 @@ class Connection(object):
                                     (
                                         self.host,
                                         str(self.port),
-                                        urllib.quote_plus(self.username),
-                                        urllib.quote_plus(self.password),
+                                        urllib.parse.quote_plus(self.username),
+                                        urllib.parse.quote_plus(self.password),
                                         self.clickhouse_settings_encoded
                                     )
-                if isinstance(query, unicode):
+                if isinstance(query, str):
                     query = query.encode('utf8')
                 r = Connection.Session.post(url, query, timeout = self.timeout)
             else:
@@ -87,11 +94,11 @@ class Connection(object):
                                     (
                                         self.host,
                                         str(self.port),
-                                        urllib.quote_plus(self.username),
-                                        urllib.quote_plus(self.password),
+                                        urllib.parse.quote_plus(self.username),
+                                        urllib.parse.quote_plus(self.password),
                                         self.clickhouse_settings_encoded
                                     )
-                if isinstance(payload, unicode):
+                if isinstance(payload, str):
                     payload = payload.encode('utf8')
                 payload = query + '\n' + payload
                 r = Connection.Session.post(url, payload, timeout = self.timeout)
@@ -100,7 +107,7 @@ class Connection(object):
             return r
         except Exception as e:
             self.close()
-            if 'BadStatusLine' in e.message:
+            if 'BadStatusLine' in str(e):  # e.g. ConnectionError has no attr. message
                 Connection.reopensession()
             logging.error(traceback.format_exc())
             raise e
@@ -111,7 +118,7 @@ class Connection(object):
         """
         if self.state != 'opened':
             result = self._call()
-            if result.content != 'Ok.\n':
+            if result.content != b'Ok.\n':  # is this ok, or should we use .encode() on LHS?
                 self.state = 'failed'
                 raise Exception('Clickhouse not responding')
             self.state = 'opened'

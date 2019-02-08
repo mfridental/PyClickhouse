@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
-from pyclickhouse import Connection
+from __future__ import print_function
 import time
 from multiprocessing import Process
+
+from pyclickhouse import Connection
 
 def timeouttest():
     conn = Connection('localhost', 8123)
@@ -9,8 +11,8 @@ def timeouttest():
     cur = conn.cursor()
     for waittimes in [1, 10, 60, 300, 600, 1200, 3600, 7200]:
         cur.select('select now()')
-        print cur.fetchone()
-        print 'Sleeping %d' % waittimes
+        print(cur.fetchone())
+        print('Sleeping %d' % waittimes)
         time.sleep(waittimes)
 
 def doconnect():
@@ -20,17 +22,17 @@ def doconnect():
         cur = conn.cursor()
         cur.select('select now()')
     except Exception as e:
-        print e
+        print(e)
 
 
 def loadtest(num):
     pp = []
 
-    print 'Preparing %d users' % num
-    for x in xrange(0, num):
+    print('Preparing %d users' % num)
+    for x in range(0, num):
         pp.append(Process(target=doconnect()))
 
-    print 'Starting load'
+    print('Starting load')
     for p in pp:
         p.start()
 
@@ -38,7 +40,7 @@ def loadtest(num):
     for p in pp:
         p.join()
         i += 1
-        print i
+        print(i)
 
 #timeouttest()
 #loadtest(10000)

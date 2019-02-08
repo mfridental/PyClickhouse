@@ -1,3 +1,7 @@
+from __future__ import print_function, absolute_import
+from builtins import str
+from past.builtins import basestring
+
 import datetime as dt
 
 class DictionaryAdapter(object):
@@ -21,7 +25,7 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
     def clickhousetypefrompython(self, pythonobj, name):
         if pythonobj is None:
             raise Exception('Cannot infer type of "%s" from None' % name)
-        if isinstance(pythonobj, unicode):
+        if isinstance(pythonobj, basestring):
             return 'String'
         if isinstance(pythonobj, str):
             return 'String'
@@ -163,7 +167,8 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
         raise Exception('Unexpected error, field cannot be unformatted, %s, %s' % (str(value), type))
 
 
-    def unformat(self, payload):
+    def unformat(self, payload_b):
+        payload=payload_b.decode()
         payload = payload.split('\n')
         if len(payload) < 3:
             raise Exception('Unexpected error, no result')
@@ -194,12 +199,12 @@ if __name__ == '__main__':
     data = [DTO(), DTO(), DTO()]
 
     formatter = TabSeparatedWithNamesAndTypesFormatter()
-    print
+    print()
     f = formatter.format(data)
-    print f
+    print(f)
     v = formatter.unformat(f)
-    print v
+    print(v)
 
-    print data[0].escaping
-    print v[0]['escaping']
-    print data[0].escaping == v[0]['escaping']
+    print(data[0].escaping)
+    print(v[0]['escaping'])
+    print(data[0].escaping == v[0]['escaping'])
