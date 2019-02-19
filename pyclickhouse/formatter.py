@@ -2,6 +2,7 @@ from __future__ import print_function, absolute_import
 from builtins import str
 from past.builtins import basestring
 
+import sys
 import datetime as dt
 
 class DictionaryAdapter(object):
@@ -168,7 +169,8 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
 
 
     def unformat(self, payload_b):
-        payload = payload_b.decode('utf8')
+        if sys.version_info[0] == 3:
+            payload = payload_b.decode('utf8')
         payload = payload.split('\n')
         if len(payload) < 3:
             raise Exception('Unexpected error, no result')
