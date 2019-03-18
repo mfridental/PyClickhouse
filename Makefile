@@ -13,12 +13,18 @@ build:
 	sh ./build.sh
 
 to_3:
-	rm Pipfile.lock || true
+	rm -f Pipfile.lock
 	pipenv install --dev --python 3
 
 to_2:
-	rm Pipfile.lock || true
+	rm -f Pipfile.lock
 	pipenv install --dev --python 2.7
 
+test_2: to_2
+	pipenv run python -m unittest discover -s test
 
-.PHONY: test run stop build
+test_3: to_3
+	pipenv run python -m unittest
+
+
+.PHONY: test run stop build test_2 test_3 to_2 to_3

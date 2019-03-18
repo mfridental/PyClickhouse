@@ -1,10 +1,10 @@
-
+from __future__ import absolute_import, print_function
 
 import datetime as dt
 import re
 
 from pyclickhouse.formatter import TabSeparatedWithNamesAndTypesFormatter
-from FilterableCache import FilterableCache
+from pyclickhouse.FilterableCache import FilterableCache
 
 class Cursor(object):
     """

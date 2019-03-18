@@ -100,7 +100,7 @@ class Connection(object):
                                     )
                 if isinstance(payload, str):
                     payload = payload.encode('utf8')
-                payload = query + '\n' + payload
+                payload = query.encode('utf-8') + '\n'.encode() + payload  # on python 3, all parts must be encoded (no implicit conversion)
                 r = Connection.Session.post(url, payload, timeout = self.timeout)
             if not r.ok:
                 raise Exception(r.content)

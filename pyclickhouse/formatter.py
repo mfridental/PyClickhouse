@@ -1,6 +1,5 @@
 from __future__ import print_function, absolute_import
-from builtins import str
-from past.builtins import basestring
+
 
 import sys
 import datetime as dt
@@ -26,7 +25,7 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
     def clickhousetypefrompython(self, pythonobj, name):
         if pythonobj is None:
             raise Exception('Cannot infer type of "%s" from None' % name)
-        if isinstance(pythonobj, basestring):
+        if isinstance(pythonobj, basestring):  # 2to3 converts this to str on python 3 during installation, no extra imports necessary
             return 'String'
         if isinstance(pythonobj, str):
             return 'String'
@@ -162,7 +161,7 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
                 else:
                     parts.append(part)
             if acc is not None:
-                raise Exception('Cannot deserialize %s' + value)
+                raise Exception('Cannot deserialize %s' % value)
 
             return [self.unformatfield(x, type[6:-1]) for x in parts]
         raise Exception('Unexpected error, field cannot be unformatted, %s, %s' % (str(value), type))

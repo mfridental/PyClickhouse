@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from __future__ import print_function
 from pyclickhouse import Connection
 import datetime as dt
 
@@ -14,10 +15,10 @@ drop table if exists simpletest
 cur.select('select count() from system.tables')
 cnt = cur.fetchall()
 
-print cnt
+print(cnt)
 
 cur.select('select * from system.tables ')
-print len(cur.fetchall())
+print(len(cur.fetchall()))
 
 cur.ddl("""
 create table simpletest (
@@ -104,12 +105,12 @@ values = values * 10000
 
 start = dt.datetime.now()
 cur.bulkinsert('simpletest', values)
-print 10000.0 / (dt.datetime.now() - start).total_seconds()
+print(10000.0 / (dt.datetime.now() - start).total_seconds())
 
 cur.select("""
 select groupArray(f26[1]) arr from simpletest
 """)
-print cur.fetchone()['arr']
+print(cur.fetchone()['arr'])
 
 cur.select("""
 select count() from simpletest

@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from __future__ import print_function
 import sys
 import logging
 import datetime as dt
@@ -73,13 +74,13 @@ if __name__ == "__main__":
         {'Color': 'green', 'Size': 11, 'Price': 330},
         {'Color': 'brown', 'Size': 10, 'Price': 100}])
 
-    print data.select('test', {'Color': 'red', 'Size': 10})
-    print
-    print data.select('test', {'Color': 'red', 'Size': (10, 12, 555)})
-    print
-    print data.select('test', {'Color': 'red', 'Size': slice(10, 12)})
-    print
-    print data.select('test', {'Color': ['red','green','not there'], 'Size': 10})
-    print
-    print data.select('test', {'Color': 'red'})
-    print
+    print(data.select('test', {'Color': 'red', 'Size': 10}))
+    print()
+    print(data.select('test', {'Color': 'red', 'Size': (10, 12, 555)}))
+    print()
+    print(data.select('test', {'Color': 'red', 'Size': slice(10, 12)}))
+    print()
+    print(data.select('test', {'Color': ['red', 'green', 'not there'], 'Size': 10}))
+    print()
+    print(data.select('test', {'Color': 'red'}))
+    print()

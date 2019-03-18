@@ -64,3 +64,4 @@ target/
 
 # Don't version Pipfile.lock because project must be compatible with python 2 and 3
 Pipfile.lock
+.idea
