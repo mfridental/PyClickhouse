@@ -11,15 +11,17 @@ class TestSimple(unittest.TestCase):
         conn.open()
         cur = conn.cursor()
 
-        cur.select('select count() from system.tables')
-        print((cur.fetchall()))
-
-        cur.select('select * from system.tables ')
-        print((len(cur.fetchall())))
-
         cur.ddl("""
         drop table if exists simpletest
         """)
+
+        cur.select('select count() from system.tables')
+        cnt = cur.fetchall()
+
+        print(cnt)
+
+        cur.select('select * from system.tables ')
+        print(len(cur.fetchall()))
 
         cur.ddl("""
         create table simpletest (
@@ -54,8 +56,7 @@ class TestSimple(unittest.TestCase):
         """)
 
         cur.select('select count() from system.tables')
-        print(cur.fetchone()['count()'] == 18)
-
+        assert cur.fetchone()['count()'] == cnt[0]['count()'] + 1
 
         cur.insert("""
         insert into simpletest values
@@ -69,8 +70,7 @@ class TestSimple(unittest.TestCase):
         """)
 
         cur.select("""select count() from simpletest """)
-        print(cur.fetchone()['count()'] == 1)
-
+        assert cur.fetchone()['count()'] == 1
 
         values = [
             {
@@ -113,7 +113,13 @@ class TestSimple(unittest.TestCase):
         """)
         print(cur.fetchone()['arr'])
 
-        cur.bulkinsert('simpletest', [{'f01': 100,'f02': 101,'f03': 102}], ['f01', 'f02', 'f03', 'f04'], ['UInt8','UInt16','UInt32','UInt64'])
+        cur.select("""
+        select count() from simpletest
+        """)
+        cnt = cur.fetchone()['count()']
+
+        cur.bulkinsert('simpletest', [{'f01': 100, 'f02': 101, 'f03': 102}], ['f01', 'f02', 'f03', 'f04'],
+                       ['UInt8', 'UInt16', 'UInt32', 'UInt64'])
 
         cur.bulkinsert('simpletest', [{}], ['f14'], ['Array(UInt8)'])
 
@@ -121,3 +127,9 @@ class TestSimple(unittest.TestCase):
 
         cur.bulkinsert('simpletest', [{'f24': ["can't"]}], ['f24'], ['Array(String)'])
 
+        cur.select("""
+        select count() from simpletest
+        """)
+        cnt2 = cur.fetchone()['count()']
+
+        assert cnt2 == cnt + 4
