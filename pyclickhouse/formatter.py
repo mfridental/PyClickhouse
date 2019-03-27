@@ -163,7 +163,7 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
             if acc is not None:
                 raise Exception('Cannot deserialize %s' % value)
 
-            return [self.unformatfield(x, type[6:-1]) for x in parts]
+            return [self.unformatfield(x, type[6:-1]) for x in [y[1:-1] if y[0]=="'" and y[-1]=="'" else y for y in parts]]
         raise Exception('Unexpected error, field cannot be unformatted, %s, %s' % (str(value), type))
 
 

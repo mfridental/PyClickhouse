@@ -3,14 +3,14 @@ from setuptools import setup
 REQUIRED=['requests', 'future', 'six']
 
 setup(name='pyclickhouse',
-      version='0.6.4',
+      version='0.6.5',
       description='Minimalist Clickhouse Python driver with an API roughly resembling Python DB API 2.0 specification.',
       url='https://github.com/Immowelt/PyClickhouse',
-      download_url = 'https://github.com/Immowelt/PyClickhouse/archive/0.6.4.tar.gz',
+      download_url = 'https://github.com/Immowelt/PyClickhouse/archive/0.6.5.tar.gz',
       keywords = ['Clickhouse', 'Database', 'Driver'],
       classifiers=[],
       author='Immowelt AG',
-      author_email='m.fridental@immowelt.de;K.Schoenrock@immowelt.de',
+      author_email='m.fridental@immowelt.de',
       license='Apache2',
       packages=['pyclickhouse'],
       install_requires=REQUIRED,
