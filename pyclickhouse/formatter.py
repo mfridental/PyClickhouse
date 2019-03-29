@@ -146,6 +146,10 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
                     parts.append(part)
                     continue
 
+                if stripped[0] == "'" and stripped[-1] != "'":
+                    acc = part
+                    continue
+
                 if acc is not None:
                     if stripped[-1] == "'":
                         parts.append(acc + ',' + part)
@@ -153,17 +157,13 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
                     else:
                         acc += ',' + part
                     continue
-                if stripped[0] == "'":
-                    if stripped[-1] != "'":
-                        acc = part
-                    else:
-                        parts.append(part)
-                else:
-                    parts.append(part)
+
+                parts.append(part)
+
             if acc is not None:
                 raise Exception('Cannot deserialize %s' % value)
 
-            return [self.unformatfield(x, type[6:-1]) for x in [y[1:-1] if y[0]=="'" and y[-1]=="'" else y for y in parts]]
+            return [self.unformatfield(x, type[6:-1]) for x in [y[1:-1] if len(y) >= 2 and y[0]=="'" and y[-1]=="'" else y for y in parts]]
         raise Exception('Unexpected error, field cannot be unformatted, %s, %s' % (str(value), type))
 
 
@@ -190,6 +190,7 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
 
 # Testing
 if __name__ == '__main__':
+
     class DTO:
         def __init__(self):
             self.id = 1

@@ -2,6 +2,7 @@
 import unittest
 import pyclickhouse
 
+from pyclickhouse.formatter import TabSeparatedWithNamesAndTypesFormatter
 
 class TestNewUnitTests(unittest.TestCase):
     """Test compatibility of insert operations with Unicode text"""
@@ -15,6 +16,10 @@ class TestNewUnitTests(unittest.TestCase):
         result = self.cursor.fetchone()['t']
         assert result[0] == 'abc'
         assert result[1] == 'def'
+
+    def test_unformat_of_commas(self):
+        formatter = TabSeparatedWithNamesAndTypesFormatter()
+        formatter.unformatfield("['abc',,'def']", 'Array(String)')  # boom
 
 
 
