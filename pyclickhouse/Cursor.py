@@ -179,10 +179,38 @@ class Cursor(object):
         self.select('select name, type from system.columns where database=%s and table=%s', database, tablename)
         return  ([x['name'] for x in self.fetchall()], [x['type'] for x in self.fetchall()])
 
+    @staticmethod
+    def _remove_nones(dict_or_array):
+        if isinstance(dict_or_array, dict):
+            result = {}
+            for k, v in dict_or_array.iteritems():
+                if v is not None:
+                    a, b = Cursor._remove_nones(v)
+                    if a:
+                        if len(b) > 0:
+                            result[k] = b
+                    else:
+                        result[k] = v
+            return True, result
+        elif hasattr(dict_or_array, '__iter__'):
+            result = []
+            for v in dict_or_array:
+                if v is not None:
+                    a, b = Cursor._remove_nones(v)
+                    if a:
+                        if len(b) > 0:
+                            result.append(b)
+                    else:
+                        result.append(v)
+            return True, result
+        else:
+            return False, 0
+
     def store_documents(self, table, documents):
         """Store dictionaries or objects into table, extending the table schema if needed. If the type of some value in
         the documents contradicts with the existing column type in clickhouse, it will be converted to String to
         accomodate all possible values"""
+        _, documents = Cursor._remove_nones(documents)
         table_fields, table_types = self.get_schema(table)
         table_schema = dict(zip(table_fields, table_types))
         adds = {}

@@ -78,8 +78,16 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
         if isinstance(pythonobj, dict):
             return 'String' # Actually JSON
         if hasattr(pythonobj, '__iter__'):
+            possibletypes = set()
             for x in pythonobj:
-                return 'Array(' + self.clickhousetypefrompython(x, name) + ')'
+                if x is not None:
+                    possibletypes.add(self.clickhousetypefrompython(x, name))
+            if len(possibletypes) == 1:
+                return 'Array(' + list(possibletypes)[0]  + ')'
+            elif len(possibletypes) == 0:
+                raise Exception('Cannot infer type of "%s" from empty array' % name)
+            else:
+                raise Exception('Array in "%s" contains values of contradicting types %s' % (name, ', '.join(possibletypes)))
         raise Exception('Cannot infer type of "%s", type not supported for: %s' % (name, str(pythonobj)))
 
 
