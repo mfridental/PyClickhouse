@@ -6,7 +6,7 @@ from multiprocessing import Process
 from pyclickhouse import Connection
 
 def timeouttest():
-    conn = Connection('localhost', 8123)
+    conn = Connection('localhost:8123')
     conn.open()
     cur = conn.cursor()
     for waittimes in [1, 10, 60, 300, 600, 1200, 3600, 7200]:
@@ -17,7 +17,7 @@ def timeouttest():
 
 def doconnect():
     try:
-        conn = Connection('localhost', 8123)
+        conn = Connection('localhost:8123')
         conn.open()
         cur = conn.cursor()
         cur.select('select now()')

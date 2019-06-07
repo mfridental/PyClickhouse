@@ -164,3 +164,47 @@ class Cursor(object):
             self.cache.add_dataset(tag, keys, self.fetchall())
 
         return self.cache.select(tag, filter)
+
+    def get_schema(self, table):
+        table = table.split('.')
+        if len(table) > 2:
+            raise Exception('%s is an invalid table name' % table)
+        elif len(table) == 2:
+            database = table[0]
+            tablename = table[1]
+        else:
+            database = 'default'
+            tablename = table[0]
+
+        self.select('select name, type from system.columns where database=%s and table=%s', database, tablename)
+        return  ([x['name'] for x in self.fetchall()], [x['type'] for x in self.fetchall()])
+
+    def store_documents(self, table, documents):
+        """Store dictionaries or objects into table, extending the table schema if needed. If the type of some value in
+        the documents contradicts with the existing column type in clickhouse, it will be converted to String to
+        accomodate all possible values"""
+        table_fields, table_types = self.get_schema(table)
+        table_schema = dict(zip(table_fields, table_types))
+        adds = {}
+        modifies = {}
+        for doc in documents:
+            doc_fields, doc_types = self.formatter.get_schema(doc)
+            for doc_field, doc_type in zip(doc_fields, doc_types):
+                if doc_field not in table_schema and doc_field not in adds:
+                     adds[doc_field] = doc_type
+                elif doc_field in table_schema and table_schema[doc_field] != doc_type:
+                    modifies[doc_field] = 'String'
+                elif doc_field in adds and adds[doc_field] != doc_type:
+                    adds[doc_field] = 'String'
+
+        for field, type in adds.iteritems():
+            self.ddl('alter table %s add column %s %s' % (table, field, type))
+            table_fields.append(field)
+            table_types.append(type)
+
+        for field, type in modifies.iteritems():
+            self.ddl('alter table %s modify column %s %s' % (table, field, type))
+            table_fields.append(field)
+            table_types.append(type)
+
+        self.bulkinsert(table, documents, table_fields, table_types)

@@ -1,18 +1,54 @@
 from __future__ import print_function, absolute_import
-
+import ujson
 
 import sys
 import datetime as dt
 
-class DictionaryAdapter(object):
-    def getfields(self, dict):
-        return dict.keys()
+class NestingLevelTooHigh(Exception):
+    pass
 
-    def getval(self, dict, field):
-        if field in dict:
-            return dict[field]
+class DictionaryAdapter(object):
+    def getfields(self, doc, prefix='', had_array=False):
+        result = []
+        for k, v in doc.iteritems():
+            if isinstance(v, dict):
+                result.extend(self.getfields(v, prefix + k + '.', had_array))
+            elif hasattr(v, '__iter__'):
+                if had_array:
+                    raise NestingLevelTooHigh()
+                dict_keys = set()
+                for tmp in v:
+                    if isinstance(tmp, dict):
+                        try:
+                            subkeys = self.getfields(tmp, prefix + k + '.', True)
+                            dict_keys = dict_keys.union(set(subkeys))
+                        except NestingLevelTooHigh:
+                            result.append(prefix + k + '.json')
+                            break
+                    else:
+                        result.append(prefix + k)
+                        break
+                result.extend(dict_keys)
+            else:
+                result.append(prefix+k)
+        return result
+
+    def getval(self, doc, field):
+        return self._getval_rec(doc, field.split('.'))
+
+    def _getval_rec(self, val, parts):
+        if len(parts) == 0:
+            return val
+        part = parts[0]
+        if len(parts) == 1 and part == 'json':
+            return ujson.dumps(val)
+        if isinstance(val, dict):
+            if part not in val:
+                return None
+            return self._getval_rec(val[part], parts[1:])
         else:
-            return None
+            assert hasattr(val, '__iter__')
+            return [self._getval_rec(x[part], parts[1:]) if part in x else None for x in val]
 
 class ObjectAdapter(object):
     def getfields(self, obj):
@@ -39,24 +75,36 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
             return 'DateTime'
         if isinstance(pythonobj, dt.date):
             return 'Date'
+        if isinstance(pythonobj, dict):
+            return 'String' # Actually JSON
         if hasattr(pythonobj, '__iter__'):
             for x in pythonobj:
                 return 'Array(' + self.clickhousetypefrompython(x, name) + ')'
         raise Exception('Cannot infer type of "%s", type not supported for: %s' % (name, str(pythonobj)))
 
 
+    def get_schema(self, doc):
+        if isinstance(doc, dict):
+            adapter = DictionaryAdapter()
+        else:
+            adapter = ObjectAdapter()
+
+        fields = adapter.getfields(doc)
+        types = [self.clickhousetypefrompython(adapter.getval(doc, f), f) for f in fields]
+
+        return fields, types
+
     def format(self, rows, fields=None, types=None):
         if len(rows) == 0:
             raise Exception('No data in rows')
+
+        if fields is None and types is None:
+            fields, types = self.get_schema(rows[0])
 
         if isinstance(rows[0], dict):
             adapter = DictionaryAdapter()
         else:
             adapter = ObjectAdapter()
-
-        if fields is None and types is None:
-            fields = adapter.getfields(rows[0])
-            types = [self.clickhousetypefrompython(adapter.getval(rows[0], f), f) for f in fields]
 
         return fields, types, '%s\n%s\n%s' % (
             '\t'.join(fields),
@@ -188,6 +236,7 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
 
         return result
 
+
 # Testing
 if __name__ == '__main__':
 
@@ -204,7 +253,7 @@ if __name__ == '__main__':
 
     formatter = TabSeparatedWithNamesAndTypesFormatter()
     print()
-    f = formatter.format(data)
+    fields, types, f = formatter.format(data)
     print(f)
     v = formatter.unformat(f)
     print(v)
@@ -212,3 +261,7 @@ if __name__ == '__main__':
     print(data[0].escaping)
     print(v[0]['escaping'])
     print(data[0].escaping == v[0]['escaping'])
+
+    print (formatter.get_schema({'id': 3, 'Offer': {'price': 5, 'count': 1}, 'Images': [{'file': 'a', 'size': 400, 'tags': ['cool','Nikon']}, {'file': 'b', 'size': 500}]}))
+
+    print (formatter.get_schema({'foo': ['Offer']}))

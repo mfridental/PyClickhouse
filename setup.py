@@ -1,12 +1,12 @@
 from setuptools import setup
 
-REQUIRED=['requests', 'future', 'six']
+REQUIRED=['requests', 'future', 'six', 'ujson']
 
 setup(name='pyclickhouse',
-      version='0.6.6',
+      version='0.7.0',
       description='Minimalist Clickhouse Python driver with an API roughly resembling Python DB API 2.0 specification.',
       url='https://github.com/Immowelt/PyClickhouse',
-      download_url = 'https://github.com/Immowelt/PyClickhouse/archive/0.6.6.tar.gz',
+      download_url = 'https://github.com/Immowelt/PyClickhouse/archive/0.7.0.tar.gz',
       keywords = ['Clickhouse', 'Database', 'Driver'],
       classifiers=[],
       author='Immowelt AG',

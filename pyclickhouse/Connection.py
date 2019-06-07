@@ -26,7 +26,7 @@ class Connection(object):
     Pool_connections=1
     Pool_maxsize=10
 
-    def __init__(self, host, port, username='default', password='', pool_connections=1, pool_maxsize=10, timeout=5, clickhouse_settings=''):
+    def __init__(self, host, port=None, username='default', password='', pool_connections=1, pool_maxsize=10, timeout=5, clickhouse_settings=''):
         """
         Create a new Connection object. Because HTTP protocol is used underneath, no real Connection is
         created. The Connection is rather an temporary object to create cursors.
@@ -45,8 +45,14 @@ class Connection(object):
         :param pool_maxsize: optional maximum number of TCP-connections this Connection object may make to the Clickhouse host.
         :return: the Connection object
         """
-        self.host = host
+        tmp = host.split(':')
+        self.host = tmp[0]
         self.port = port
+        if self.port is None:
+            if len(tmp) > 1:
+                self.port = int(tmp[-1])
+            else:
+                self.port = 8123
         self.username = username
         self.password = password
         self.state = 'closed'

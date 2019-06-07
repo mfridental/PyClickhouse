@@ -7,7 +7,7 @@ from pyclickhouse import Connection
 
 class TestSimple(unittest.TestCase):
     def test_simple(self):
-        conn = Connection('localhost', 8123)
+        conn = Connection('localhost:8123')
         conn.open()
         cur = conn.cursor()
 
@@ -102,7 +102,7 @@ class TestSimple(unittest.TestCase):
                 'f26': [dt.datetime.now()]
             }]
 
-        values = values * 10000
+        #values = values * 10000
 
         start = dt.datetime.now()
         cur.bulkinsert('simpletest', values)

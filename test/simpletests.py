@@ -3,7 +3,7 @@ from __future__ import print_function
 from pyclickhouse import Connection
 import datetime as dt
 
-conn = Connection('localhost', 8123)
+conn = Connection('localhost:8123')
 conn.open()
 cur = conn.cursor()
 
