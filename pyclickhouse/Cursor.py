@@ -250,6 +250,8 @@ class Cursor(object):
                      adds[doc_field] = doc_type
                 elif doc_field in table_schema and table_schema[doc_field] != doc_type:
                     modifies[doc_field] = self.generalize_type(table_schema[doc_field], doc_type)
+                elif doc_field in modifies and modifies[doc_field] != doc_type:
+                    modifies[doc_field] = self.generalize_type(modifies[doc_field], doc_type)
                 elif doc_field in adds and adds[doc_field] != doc_type:
                     adds[doc_field] = self.generalize_type(table_schema[doc_field], doc_type)
 
@@ -259,10 +261,13 @@ class Cursor(object):
             table_fields.append(field)
             table_types.append(type)
 
+        table_schema = dict(zip(table_fields, table_types))
+
         for field, type in modifies.iteritems():
-            logging.info('Modifying %s with %s %s' % (table, field, type))
-            self.ddl('alter table %s modify column %s %s' % (table, field, type))
-            table_fields.append(field)
-            table_types.append(type)
+            if type != table_schema[field]:
+                logging.info('Modifying %s with %s %s' % (table, field, type))
+                self.ddl('alter table %s modify column %s %s' % (table, field, type))
+                table_fields.append(field)
+                table_types.append(type)
 
         self.bulkinsert(table, documents, table_fields, table_types)
