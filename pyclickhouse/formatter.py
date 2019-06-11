@@ -129,6 +129,9 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
                 return '1' if value else '0'
             return str(value)
         if type in ['String']:
+            if sys.version_info[0] == 2 and isinstance(value, unicode):
+                value = value.encode('utf8')
+
             if value is None:
                 escaped = ''
             else:
