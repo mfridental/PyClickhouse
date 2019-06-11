@@ -243,8 +243,10 @@ class Cursor(object):
         table_schema = dict(zip(table_fields, table_types))
         adds = {}
         modifies = {}
+        all_doc_fields = set()
         for doc in documents:
             doc_fields, doc_types = self.formatter.get_schema(doc)
+            all_doc_fields = all_doc_fields.union(doc_fields)
             for doc_field, doc_type in zip(doc_fields, doc_types):
                 if doc_field not in table_schema and doc_field not in adds:
                      adds[doc_field] = doc_type
@@ -270,4 +272,12 @@ class Cursor(object):
                 table_fields.append(field)
                 table_types.append(type)
 
-        self.bulkinsert(table, documents, table_fields, table_types)
+        # when passing fields not existing in the doc, the default clause won't be executed by clickhouse
+        # so we only pass fields present at least in one doc
+        table_fields2 = []
+        table_types2 = []
+        for f, t in zip(table_fields, table_types):
+            if f in all_doc_fields:
+                table_fields2.append(f)
+                table_types2.append(t)
+        self.bulkinsert(table, documents, table_fields2, table_types2)
