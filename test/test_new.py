@@ -110,4 +110,8 @@ class TestNewUnitTests(unittest.TestCase):
             for right in types:
                 result = self.cursor.generalize_type(left, right)
                 assert result == results[i]
+
+                result = self.cursor.generalize_type('Array(%s)' % left, 'Array(%s)' % right)
+                assert result == 'Array(%s)' % results[i]
+
                 i += 1
