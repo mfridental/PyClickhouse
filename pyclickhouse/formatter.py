@@ -3,6 +3,7 @@ import ujson
 
 import sys
 import datetime as dt
+from decimal import Decimal
 
 class NestingLevelTooHigh(Exception):
     pass
@@ -67,9 +68,9 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
             return 'String'
         if isinstance(pythonobj, bool):
             return 'UInt8'
-        if isinstance(pythonobj, int):
+        if isinstance(pythonobj, int) or isinstance(pythonobj, long):
             return 'Int64'
-        if isinstance(pythonobj, float):
+        if isinstance(pythonobj, float) or isinstance(pythonobj, Decimal):
             return 'Float64'
         if isinstance(pythonobj, dt.datetime):
             return 'DateTime'
@@ -88,7 +89,7 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
                 raise Exception('Cannot infer type of "%s" from empty array' % name)
             else:
                 raise Exception('Array in "%s" contains values of contradicting types %s' % (name, ', '.join(possibletypes)))
-        raise Exception('Cannot infer type of "%s", type not supported for: %s' % (name, str(pythonobj)))
+        raise Exception('Cannot infer type of "%s", type not supported for: %s, %s' % (name, repr(pythonobj), type(pythonobj)))
 
 
     def get_schema(self, doc):
