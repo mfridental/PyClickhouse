@@ -37,4 +37,77 @@ class TestNewUnitTests(unittest.TestCase):
         self.cursor.store_documents('docs', [doc])
         self.cursor.select('select * from docs')
         r = self.cursor.fetchone()
-        assert str(r) == """{'Images.json': '[{"tags":["cool","Nikon"],"file":"a","size":400},{"file":"b","size":500}]', 'Offer.price': 5, 'id': 3, 'Offer.count': 1, 'historydate': None}"""
+        assert 'Images.json' in  str(r)
+
+    def test_type_generalization(self):
+        types = ['Int8', 'Int16', 'Int32', 'Int64', 'Float32', 'Float64', 'Date', 'DateTime']
+        results = ['Int8',
+        'Int16',
+        'Int32',
+        'Int64',
+        'Float32',
+        'Float64',
+        'String',
+        'String',
+        'Int16',
+        'Int16',
+        'Int32',
+        'Int64',
+        'Float32',
+        'Float64',
+        'String',
+        'String',
+        'Int32',
+        'Int32',
+        'Int32',
+        'Int64',
+        'Float32',
+        'Float64',
+        'String',
+        'String',
+        'Int64',
+        'Int64',
+        'Int64',
+        'Int64',
+        'Float32',
+        'Float64',
+        'String',
+        'String',
+        'Float32',
+        'Float32',
+        'Float32',
+        'Float32',
+        'Float32',
+        'Float64',
+        'String',
+        'String',
+        'Float64',
+        'Float64',
+        'Float64',
+        'Float64',
+        'Float64',
+        'Float64',
+        'String',
+        'String',
+        'String',
+        'String',
+        'String',
+        'String',
+        'String',
+        'String',
+        'Date',
+        'DateTime',
+        'String',
+        'String',
+        'String',
+        'String',
+        'String',
+        'String',
+        'DateTime',
+        'DateTime']
+        i = 0
+        for left in types:
+            for right in types:
+                result = self.cursor.generalize_type(left, right)
+                assert result == results[i]
+                i += 1

@@ -1,10 +1,12 @@
 from __future__ import absolute_import, print_function
 
 import datetime as dt
+import logging
 import re
 
-from pyclickhouse.formatter import TabSeparatedWithNamesAndTypesFormatter
 from pyclickhouse.FilterableCache import FilterableCache
+from pyclickhouse.formatter import TabSeparatedWithNamesAndTypesFormatter
+
 
 class Cursor(object):
     """
@@ -206,6 +208,32 @@ class Cursor(object):
         else:
             return False, 0
 
+    def generalize_type(self, existing_type, new_type):
+        arr = 'Array('
+        if existing_type == new_type:
+            return existing_type
+        elif existing_type.startswith(arr) and new_type.startswith(arr):
+            return 'Array(%s)' % self.generalize_type(existing_type[len(arr):-1], new_type[len(arr):-1])
+        elif existing_type.startswith(arr) or new_type.startswith(arr):
+            return 'String'
+        elif existing_type.startswith('Int') and new_type.startswith('Float'):
+            return new_type
+        elif existing_type.startswith('Float') and new_type.startswith('Int'):
+            return existing_type
+        elif existing_type.startswith('Int') and new_type.startswith('Int'):
+            existing_bits = int(existing_type[3:])
+            new_bits = int(new_type[3:])
+            return 'Int%d' % (max(existing_bits, new_bits))
+        elif existing_type.startswith('Float') and new_type.startswith('Float'):
+            existing_bits = int(existing_type[5:])
+            new_bits = int(new_type[5:])
+            return 'Float%d' % (max(existing_bits, new_bits))
+        elif existing_type == 'Date' and new_type == 'DateTime':
+            return new_type
+        elif existing_type == 'DateTime' and new_type == 'Date':
+            return existing_type
+        return 'String'
+
     def store_documents(self, table, documents):
         """Store dictionaries or objects into table, extending the table schema if needed. If the type of some value in
         the documents contradicts with the existing column type in clickhouse, it will be converted to String to
@@ -221,16 +249,18 @@ class Cursor(object):
                 if doc_field not in table_schema and doc_field not in adds:
                      adds[doc_field] = doc_type
                 elif doc_field in table_schema and table_schema[doc_field] != doc_type:
-                    modifies[doc_field] = 'String'
+                    modifies[doc_field] = self.generalize_type(table_schema[doc_field], doc_type)
                 elif doc_field in adds and adds[doc_field] != doc_type:
-                    adds[doc_field] = 'String'
+                    adds[doc_field] = self.generalize_type(table_schema[doc_field], doc_type)
 
         for field, type in adds.iteritems():
+            logging.info('Extending %s with %s %s' % (table, field, type))
             self.ddl('alter table %s add column %s %s' % (table, field, type))
             table_fields.append(field)
             table_types.append(type)
 
         for field, type in modifies.iteritems():
+            logging.info('Modifying %s with %s %s' % (table, field, type))
             self.ddl('alter table %s modify column %s %s' % (table, field, type))
             table_fields.append(field)
             table_types.append(type)
