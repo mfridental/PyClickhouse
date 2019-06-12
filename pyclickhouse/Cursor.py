@@ -262,8 +262,7 @@ class Cursor(object):
             try:
                 self.ddl('alter table %s add column %s %s' % (table, field, type))
             except Exception as e:
-                if 'column with this name already exists' not in e.message:
-                    logging.exception('Cannot add column %s %s to table %s' % (field, type, table))
+                logging.info('Cannot add column %s %s to table %s %s' % (field, type, table, e.message))
             table_fields.append(field)
             table_types.append(type)
 
