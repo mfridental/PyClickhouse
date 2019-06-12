@@ -279,4 +279,14 @@ class Cursor(object):
         types = [doc_schema[f] for f in fields]
 
         self._ensure_schema(table, fields, types)
-        self.bulkinsert(table, documents, fields, types)
+        tries = 0
+        while tries < 5:
+            try:
+                self.bulkinsert(table, documents, fields, types)
+                return
+            except Exception as e:
+                if 'bad version' in e.message:  # can happen if we're inserting data while some other process is changing the table
+                    tries += 1
+                else:
+                    raise e
+        raise e
