@@ -129,6 +129,18 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
                 return '1' if value else '0'
             return str(value)
         if type in ['String']:
+            # Because String is also a type for columns having values of various type depending on row, the value
+            # parameter might be just anything and has to be converted first
+            if not isinstance(value, basestring):
+                if isinstance(value, int) or isinstance(value, float) or isinstance(value, bool):
+                    value = str(value)
+                elif isinstance(value, dt.date):
+                    value = value.strftime('%Y-%m-%d')
+                elif isinstance(value, dt.datetime):
+                    value = value.strftime('%Y-%m-%d %H:%M:%S')
+                else:
+                    value = ujson.dumps(value)
+
             if sys.version_info[0] == 2 and isinstance(value, unicode):
                 value = value.encode('utf8')
 

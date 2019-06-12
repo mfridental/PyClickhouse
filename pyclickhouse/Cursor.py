@@ -234,57 +234,49 @@ class Cursor(object):
             return existing_type
         return 'String'
 
+    def _ensure_schema(self, table, fields, types):
+        tries = 0
+        while tries < 5:
+            try:
+                table_fields, table_types = self.get_schema(table)
+                table_schema = dict(zip(table_fields, table_types))
+                ddled = False
+                for doc_field, doc_type in zip(fields, types):
+                    if doc_field not in table_schema:
+                        logging.info('Extending %s with %s %s' % (table, doc_field, doc_type))
+                        self.ddl('alter table %s add column %s %s' % (table, doc_field, doc_type))
+                        ddled = True
+                    elif doc_field in table_schema and table_schema[doc_field] != doc_type:
+                        new_type = self.generalize_type(table_schema[doc_field], doc_type)
+                        logging.info('Modifying %s with %s %s' % (table, doc_field, new_type))
+                        self.ddl('alter table %s modify column %s %s' % (table, doc_field, new_type))
+                        ddled = True
+
+                if ddled:
+                    self.ddl('optimize table %s' % table)
+
+                return
+            except Exception as e:
+                tries += 1
+
+        raise Exception('Cannot ensure target schema in %s, %s' % (table, e.message))
+
     def store_documents(self, table, documents):
         """Store dictionaries or objects into table, extending the table schema if needed. If the type of some value in
         the documents contradicts with the existing column type in clickhouse, it will be converted to String to
         accomodate all possible values"""
         _, documents = Cursor._remove_nones(documents)
-        table_fields, table_types = self.get_schema(table)
-        table_schema = dict(zip(table_fields, table_types))
-        adds = {}
-        modifies = {}
-        all_doc_fields = set()
+        doc_schema = {}
         for doc in documents:
             doc_fields, doc_types = self.formatter.get_schema(doc)
-            all_doc_fields = all_doc_fields.union(doc_fields)
-            for doc_field, doc_type in zip(doc_fields, doc_types):
-                if doc_field not in table_schema and doc_field not in adds:
-                     adds[doc_field] = doc_type
-                elif doc_field in table_schema and table_schema[doc_field] != doc_type:
-                    modifies[doc_field] = self.generalize_type(table_schema[doc_field], doc_type)
-                elif doc_field in modifies and modifies[doc_field] != doc_type:
-                    modifies[doc_field] = self.generalize_type(modifies[doc_field], doc_type)
-                elif doc_field in adds and adds[doc_field] != doc_type:
-                    adds[doc_field] = self.generalize_type(table_schema[doc_field], doc_type)
+            for f, t in zip(doc_fields, doc_types):
+                if f not in doc_schema:
+                    doc_schema[f] = t
+                elif doc_schema[f] != t:
+                    doc_schema[f] = self.generalize_type(doc_schema[f], t)
 
-        for field, type in adds.iteritems():
-            logging.info('Extending %s with %s %s' % (table, field, type))
-            try:
-                self.ddl('alter table %s add column %s %s' % (table, field, type))
-            except Exception as e:
-                logging.info('Cannot add column %s %s to table %s %s' % (field, type, table, e.message))
-            table_fields.append(field)
-            table_types.append(type)
+        fields = doc_schema.keys()
+        types = [doc_schema[f] for f in fields]
 
-        table_schema = dict(zip(table_fields, table_types))
-
-        for field, type in modifies.iteritems():
-            if type != table_schema[field]:
-                logging.info('Modifying %s with %s %s' % (table, field, type))
-                self.ddl('alter table %s modify column %s %s' % (table, field, type))
-                table_fields.append(field)
-                table_types.append(type)
-
-        # when passing fields not existing in the doc, the default clause won't be executed by clickhouse
-        # so we only pass fields present at least in one doc
-        table_fields2 = []
-        table_types2 = []
-        for f, t in zip(table_fields, table_types):
-            if f in all_doc_fields:
-                table_fields2.append(f)
-                table_types2.append(t)
-
-        if len(adds) > 0 or len(modifies) > 0:
-            self.ddl('optimize table %s' % table)
-
-        self.bulkinsert(table, documents, table_fields2, table_types2)
+        self._ensure_schema(table, fields, types)
+        self.bulkinsert(table, documents, fields, types)
