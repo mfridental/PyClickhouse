@@ -259,7 +259,11 @@ class Cursor(object):
 
         for field, type in adds.iteritems():
             logging.info('Extending %s with %s %s' % (table, field, type))
-            self.ddl('alter table %s add column %s %s' % (table, field, type))
+            try:
+                self.ddl('alter table %s add column %s %s' % (table, field, type))
+            except Exception as e:
+                if 'column with this name already exists' not in e.message:
+                    logging.exception('Cannot add column %s %s to table %s' % (field, type, table))
             table_fields.append(field)
             table_types.append(type)
 
@@ -280,4 +284,8 @@ class Cursor(object):
             if f in all_doc_fields:
                 table_fields2.append(f)
                 table_types2.append(t)
+
+        if len(adds) > 0 or len(modifies) > 0:
+            self.ddl('optimize table %s' % table)
+
         self.bulkinsert(table, documents, table_fields2, table_types2)
