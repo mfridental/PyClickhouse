@@ -2,6 +2,7 @@ from __future__ import absolute_import, print_function
 
 import datetime as dt
 import logging
+import time
 import re
 
 from pyclickhouse.FilterableCache import FilterableCache
@@ -255,13 +256,13 @@ class Cursor(object):
                 if ddled:
                     self.ddl('optimize table %s' % table)
 
-                return
+                return ddled
             except Exception as e:
                 tries += 1
 
         raise Exception('Cannot ensure target schema in %s, %s' % (table, e.message))
 
-    def store_documents(self, table, documents):
+    def store_documents(self, table, documents, schema_update_time = 60):
         """Store dictionaries or objects into table, extending the table schema if needed. If the type of some value in
         the documents contradicts with the existing column type in clickhouse, it will be converted to String to
         accomodate all possible values"""
@@ -278,7 +279,8 @@ class Cursor(object):
         fields = doc_schema.keys()
         types = [doc_schema[f] for f in fields]
 
-        self._ensure_schema(table, fields, types)
+        if self._ensure_schema(table, fields, types):
+            time.sleep(schema_update_time)
         tries = 0
         while tries < 5:
             try:
