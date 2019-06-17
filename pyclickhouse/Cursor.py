@@ -6,7 +6,7 @@ import time
 import re
 
 from pyclickhouse.FilterableCache import FilterableCache
-from pyclickhouse.formatter import TabSeparatedWithNamesAndTypesFormatter
+from pyclickhouse.formatter import TabSeparatedWithNamesAndTypesFormatter, MultilevelDictionaryAdapter
 
 
 class Cursor(object):
@@ -76,7 +76,7 @@ class Cursor(object):
     You can pass parameters to the queries, by marking their places in the query using %s, for example
     cursor.select('SELECT count() FROM table WHERE field=%s', 123)
         """
-        if re.match (r'^.+?\s+format\s+\w+$', query.lower()) is None:
+        if re.match(r'^.+?\s+format\s+\w+$', query.lower()) is None:
             query += ' FORMAT TabSeparatedWithNamesAndTypes'
             self.executewithpayload(query, None, True, *args)
         else:
@@ -144,7 +144,6 @@ class Cursor(object):
         """
         return self.lastparsedresult
 
-
     def cached_select(self, query, filter):
         """
         At the first call, execute the query and store its result into a cache, organizing it in a dictionary in the way
@@ -182,33 +181,6 @@ class Cursor(object):
         self.select('select name, type from system.columns where database=%s and table=%s', database, tablename)
         return  ([x['name'] for x in self.fetchall()], [x['type'] for x in self.fetchall()])
 
-    @staticmethod
-    def _remove_nones(dict_or_array):
-        if isinstance(dict_or_array, dict):
-            result = {}
-            for k, v in dict_or_array.iteritems():
-                if v is not None:
-                    a, b = Cursor._remove_nones(v)
-                    if a:
-                        if len(b) > 0:
-                            result[k] = b
-                    else:
-                        result[k] = v
-            return True, result
-        elif hasattr(dict_or_array, '__iter__'):
-            result = []
-            for v in dict_or_array:
-                if v is not None:
-                    a, b = Cursor._remove_nones(v)
-                    if a:
-                        if len(b) > 0:
-                            result.append(b)
-                    else:
-                        result.append(v)
-            return True, result
-        else:
-            return False, 0
-
     def generalize_type(self, existing_type, new_type):
         arr = 'Array('
         if existing_type == new_type:
@@ -234,6 +206,19 @@ class Cursor(object):
         elif existing_type == 'DateTime' and new_type == 'Date':
             return existing_type
         return 'String'
+
+    @staticmethod
+    def _flatten_dict(documents):
+        adapter = MultilevelDictionaryAdapter()
+        result = []
+        for doc in documents:
+            d = {}
+            for field in adapter.getfields(doc):
+                val = adapter.getval(doc, field)
+                if val is not None and (not hasattr(val, '__len__') or len(val) > 0):
+                    d[field] = val
+            result.append(d)
+        return result
 
     def _ensure_schema(self, table, fields, types):
         tries = 0
@@ -266,7 +251,7 @@ class Cursor(object):
         """Store dictionaries or objects into table, extending the table schema if needed. If the type of some value in
         the documents contradicts with the existing column type in clickhouse, it will be converted to String to
         accomodate all possible values"""
-        _, documents = Cursor._remove_nones(documents)
+        documents = Cursor._flatten_dict(documents)
         doc_schema = {}
         for doc in documents:
             doc_fields, doc_types = self.formatter.get_schema(doc)

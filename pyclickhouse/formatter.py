@@ -8,10 +8,22 @@ from decimal import Decimal
 class NestingLevelTooHigh(Exception):
     pass
 
+
+
 class DictionaryAdapter(object):
+    def getfields(self, dict):
+        return dict.keys()
+
+    def getval(self, dict, field):
+        if field in dict:
+            return dict[field]
+        else:
+            return None
+
+class MultilevelDictionaryAdapter(object):
     def getfields(self, doc, prefix='', had_array=False):
         result = []
-        for k, v in doc.iteritems():
+        for k, v in doc.items():
             if isinstance(v, dict):
                 result.extend(self.getfields(v, prefix + k + '.', had_array))
             elif hasattr(v, '__iter__'):
