@@ -25,7 +25,7 @@ class MultilevelDictionaryAdapter(object):
         result = []
         for k, v in doc.items():
             if isinstance(v, dict):
-                result.extend(self.getfields(v, prefix + k + '.', had_array))
+                result.extend(self.getfields(v, prefix + k + '_', had_array))
             elif hasattr(v, '__iter__'):
                 if had_array:
                     raise NestingLevelTooHigh()
@@ -33,10 +33,10 @@ class MultilevelDictionaryAdapter(object):
                 for tmp in v:
                     if isinstance(tmp, dict):
                         try:
-                            subkeys = self.getfields(tmp, prefix + k + '.', True)
+                            subkeys = self.getfields(tmp, prefix + k + '_', True)
                             dict_keys = dict_keys.union(set(subkeys))
                         except NestingLevelTooHigh:
-                            result.append(prefix + k + '.json')
+                            result.append(prefix + k + '_json')
                             break
                     else:
                         result.append(prefix + k)

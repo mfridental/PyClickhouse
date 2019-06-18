@@ -4,9 +4,10 @@ import datetime as dt
 import logging
 import time
 import re
+import ujson
 
 from pyclickhouse.FilterableCache import FilterableCache
-from pyclickhouse.formatter import TabSeparatedWithNamesAndTypesFormatter, MultilevelDictionaryAdapter
+from pyclickhouse.formatter import TabSeparatedWithNamesAndTypesFormatter, NestingLevelTooHigh
 
 
 class Cursor(object):
@@ -208,16 +209,48 @@ class Cursor(object):
         return 'String'
 
     @staticmethod
-    def _flatten_dict(documents):
-        adapter = MultilevelDictionaryAdapter()
-        result = []
-        for doc in documents:
-            d = {}
-            for field in adapter.getfields(doc):
-                val = adapter.getval(doc, field)
-                if val is not None and (not hasattr(val, '__len__') or len(val) > 0):
-                    d[field] = val
-            result.append(d)
+    def _flatten_array(arr, prefix=''):
+        result = {}
+        try:
+            for i, element in enumerate(arr):
+                if element is None or (hasattr(element, '__len__') and len(element) == 0):
+                    continue
+                if hasattr(element, 'items'):
+                    for k, v in Cursor._flatten_dict(element, prefix, allow_arrays=False).items():
+                        if k not in result:
+                            result[k] = [None] * len(arr)
+                        result[k][i] = v
+                elif hasattr(element, '__iter__'):
+                    raise NestingLevelTooHigh()
+                else:
+                    if prefix not in result:
+                        result[prefix] = [None]*len(arr)
+                    result[prefix][i] = element
+        except NestingLevelTooHigh:
+            result[prefix+'_json'] = ujson.dumps(arr)
+
+        return result
+
+    @staticmethod
+    def _flatten_dict(doc, prefix='', allow_arrays=True):
+        result = {}
+
+        if prefix != '':
+            prefix += '_'
+
+        for k,v in doc.items():
+            if v is None or (hasattr(v, '__len__') and len(v) == 0):
+                continue
+            if hasattr(v, 'items'):
+                result.update(Cursor._flatten_dict(v, prefix + k))
+            elif hasattr(v, '__iter__'):
+                if allow_arrays:
+                    result.update(Cursor._flatten_array(v, prefix + k))
+                else:
+                    raise NestingLevelTooHigh()
+            else:
+                result[prefix+k] = v
+
         return result
 
     def _ensure_schema(self, table, fields, types):
@@ -251,7 +284,7 @@ class Cursor(object):
         """Store dictionaries or objects into table, extending the table schema if needed. If the type of some value in
         the documents contradicts with the existing column type in clickhouse, it will be converted to String to
         accomodate all possible values"""
-        documents = Cursor._flatten_dict(documents)
+        documents = [Cursor._flatten_dict(doc) for doc in documents]
         doc_schema = {}
         for doc in documents:
             doc_fields, doc_types = self.formatter.get_schema(doc)

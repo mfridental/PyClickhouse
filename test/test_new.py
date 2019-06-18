@@ -3,6 +3,7 @@ import unittest
 import pyclickhouse
 import datetime as dt
 from pyclickhouse.formatter import TabSeparatedWithNamesAndTypesFormatter
+import json
 
 class TestNewUnitTests(unittest.TestCase):
     """Test compatibility of insert operations with Unicode text"""
@@ -25,19 +26,51 @@ class TestNewUnitTests(unittest.TestCase):
         doc = {'id': 3, 'historydate': dt.date(2019,6,7), 'Offer': {'price': 5, 'count': 1}, 'Images': [{'file': 'a', 'size': 400}, {'file': 'b', 'size': 500}]}
         self.cursor.ddl('drop table if exists docs')
         self.cursor.ddl('create table if not exists docs (historydate Date, id Int64) Engine=MergeTree(historydate, id, 8192)')
-        self.cursor.store_documents('docs', [doc])
+        self.cursor.store_documents('docs', [doc], schema_update_time=0)
         self.cursor.select('select * from docs')
         r = self.cursor.fetchone()
-        assert str(r) == "{'Images.file': ['a', 'b'], 'Images.size': [400, 500], 'Offer.count': 1, 'Offer.price': 5, 'id': 3, 'historydate': datetime.date(2019, 6, 7)}"
+        assert r['Images_file'] == ['a', 'b']
+        assert r['Images_size'] == [400, 500]
+        assert r['Offer_count'] == 1
+        assert r['Offer_price'] == 5
+        assert r['id'] == 3
+        assert r['historydate'] == dt.date(2019, 6, 7)
 
     def test_store_doc2(self):
         doc = {'id': 3, 'Offer': {'price': 5, 'count': 1}, 'Images': [{'file': 'a', 'size': 400, 'tags': ['cool','Nikon']}, {'file': 'b', 'size': 500}]}
         self.cursor.ddl('drop table if exists docs')
         self.cursor.ddl('create table if not exists docs (historydate Date, id Int64) Engine=MergeTree(historydate, id, 8192)')
-        self.cursor.store_documents('docs', [doc])
+        self.cursor.store_documents('docs', [doc], schema_update_time=0)
         self.cursor.select('select * from docs')
         r = self.cursor.fetchone()
-        assert 'Images.json' in  str(r)
+        assert 'Images_json' in r
+
+    def test_dict_flattening(self):
+        doc = {'id': 3}
+        bulk = pyclickhouse.Cursor._flatten_dict(doc)
+        assert bulk == doc
+
+        doc = {'id': 3, 'sub': {'dict': True}}
+        bulk = pyclickhouse.Cursor._flatten_dict(doc)
+        assert bulk == {'id': 3, 'sub_dict': True}
+
+        doc = {'id': 3, 'sub': ['array', 'abc']}
+        bulk = pyclickhouse.Cursor._flatten_dict(doc)
+        assert bulk == doc
+
+        doc = {'id': 3, 'sub': [{'dict': 'in_array'}, {'dict': 'in_array_also', 'otherkey': True}]}
+        bulk = pyclickhouse.Cursor._flatten_dict(doc)
+        assert bulk == {'id': 3, 'sub_dict': ['in_array', 'in_array_also'], 'sub_otherkey': [None, True]}
+
+        doc = {'id': 3, 'sub': {'array': ['in_dict', 'second']}}
+        bulk = pyclickhouse.Cursor._flatten_dict(doc)
+        assert bulk == {'id': 3, 'sub_array': ['in_dict', 'second']}
+
+        doc = {'id': 3, 'sub': [{'dict': 'in_array', 'needs': ['json', 'too_much_nesting']}]}
+        bulk = pyclickhouse.Cursor._flatten_dict(doc)
+        assert bulk == {'id': 3, 'sub_json': '[{"needs":["json","too_much_nesting"],"dict":"in_array"}]'}
+
+
 
     def test_type_generalization(self):
         types = ['Int8', 'Int16', 'Int32', 'Int64', 'Float32', 'Float64', 'Date', 'DateTime']
