@@ -115,7 +115,7 @@ class Cursor(object):
             self.executewithpayload('INSERT INTO %s (%s) FORMAT TabSeparatedWithNamesAndTypes' %
                                     (table, ','.join(fields)), payload, False)
         else:
-            batch = int(2000000000/len(payload)*len(values))
+            batch = int(2000000000.0/len(payload)*len(values))
             if batch < 1:
                 raise Exception("Payload of the values is larger than 2Gb, Clickhouse won't probably accept that")
             for i in range(0, len(values), batch):
