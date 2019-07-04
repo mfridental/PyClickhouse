@@ -315,5 +315,5 @@ class Cursor(object):
                 if 'bad version' in e.message:  # can happen if we're inserting data while some other process is changing the table
                     tries += 1
                 else:
-                    raise e
+                    raise
         raise e

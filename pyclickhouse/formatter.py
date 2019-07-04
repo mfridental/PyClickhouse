@@ -128,7 +128,7 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
             adapter = ObjectAdapter()
 
         return fields, types, '%s\n%s\n%s' % (
-            '\t'.join(fields),
+            '\t'.join([x.encode('utf8') for x in fields]),
             '\t'.join(types),
             '\n'.join(['\t'.join([self.formatfield(adapter.getval(r, f), t) for f, t in zip(fields, types)]) for r in rows])
         )
