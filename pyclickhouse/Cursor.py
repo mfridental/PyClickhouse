@@ -274,9 +274,10 @@ class Cursor(object):
                         ddled = True
                     elif doc_field in table_schema and table_schema[doc_field] != doc_type:
                         new_type = self.generalize_type(table_schema[doc_field], doc_type)
-                        logging.info('Modifying %s with %s %s' % (table, doc_field, new_type))
-                        self.ddl('alter table %s modify column %s %s' % (table, doc_field, new_type))
-                        ddled = True
+                        if new_type != table_schema[doc_field]:
+                            logging.info('Modifying %s with %s %s' % (table, doc_field, new_type))
+                            self.ddl('alter table %s modify column %s %s' % (table, doc_field, new_type))
+                            ddled = True
 
                 if ddled:
                     self.ddl('optimize table %s' % table)
