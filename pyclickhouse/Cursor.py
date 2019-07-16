@@ -261,7 +261,7 @@ class Cursor(object):
                 if ddled:
                     self.ddl('optimize table %s' % table)
 
-                return fields, types
+                return fields, new_types
             except Exception as e:
                 tries += 1
 

@@ -113,10 +113,13 @@ class Connection(object):
             return r
         except Exception as e:
             self.close()
-            if 'BadStatusLine' in str(e):  # e.g. ConnectionError has no attr. message
-                Connection.reopensession()
+            try:
+                if 'BadStatusLine' in str(e):  # e.g. ConnectionError has no attr. message
+                    Connection.reopensession()
+            except:
+                pass
             logging.error(traceback.format_exc())
-            raise e
+            raise
 
     def open(self):
         """
