@@ -71,6 +71,33 @@ class ObjectAdapter(object):
         return getattr(obj, field)
 
 class TabSeparatedWithNamesAndTypesFormatter(object):
+    def generalize_type(self, existing_type, new_type):
+        arr = 'Array('
+        if existing_type == new_type:
+            return existing_type
+        elif existing_type.startswith(arr) and new_type.startswith(arr):
+            return 'Array(%s)' % self.generalize_type(existing_type[len(arr):-1], new_type[len(arr):-1])
+        elif existing_type.startswith(arr) or new_type.startswith(arr):
+            return 'String'
+        elif existing_type.startswith('Int') and new_type.startswith('Float'):
+            return new_type
+        elif existing_type.startswith('Float') and new_type.startswith('Int'):
+            return existing_type
+        elif existing_type.startswith('Int') and new_type.startswith('Int'):
+            existing_bits = int(existing_type[3:])
+            new_bits = int(new_type[3:])
+            return 'Int%d' % (max(existing_bits, new_bits))
+        elif existing_type.startswith('Float') and new_type.startswith('Float'):
+            existing_bits = int(existing_type[5:])
+            new_bits = int(new_type[5:])
+            return 'Float%d' % (max(existing_bits, new_bits))
+        elif existing_type == 'Date' and new_type == 'DateTime':
+            return new_type
+        elif existing_type == 'DateTime' and new_type == 'Date':
+            return existing_type
+        return 'String'
+
+
     def clickhousetypefrompython(self, pythonobj, name):
         if pythonobj is None:
             raise Exception('Cannot infer type of "%s" from None' % name)
@@ -99,6 +126,10 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
                 return 'Array(' + list(possibletypes)[0]  + ')'
             elif len(possibletypes) == 0:
                 raise Exception('Cannot infer type of "%s" from empty array' % name)
+            elif len(possibletypes) == 2:
+                possibletypes = list(possibletypes)
+                newtype = self.generalize_type(possibletypes[0], possibletypes[1])
+                return 'Array(%s)' % newtype
             else:
                 raise Exception('Array in "%s" contains values of contradicting types %s' % (name, ', '.join(possibletypes)))
         raise Exception('Cannot infer type of "%s", type not supported for: %s, %s' % (name, repr(pythonobj), type(pythonobj)))

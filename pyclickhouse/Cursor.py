@@ -189,32 +189,6 @@ class Cursor(object):
         self.select('select name, type from system.columns where database=%s and table=%s', database, tablename)
         return  ([x['name'] for x in self.fetchall()], [x['type'] for x in self.fetchall()])
 
-    def generalize_type(self, existing_type, new_type):
-        arr = 'Array('
-        if existing_type == new_type:
-            return existing_type
-        elif existing_type.startswith(arr) and new_type.startswith(arr):
-            return 'Array(%s)' % self.generalize_type(existing_type[len(arr):-1], new_type[len(arr):-1])
-        elif existing_type.startswith(arr) or new_type.startswith(arr):
-            return 'String'
-        elif existing_type.startswith('Int') and new_type.startswith('Float'):
-            return new_type
-        elif existing_type.startswith('Float') and new_type.startswith('Int'):
-            return existing_type
-        elif existing_type.startswith('Int') and new_type.startswith('Int'):
-            existing_bits = int(existing_type[3:])
-            new_bits = int(new_type[3:])
-            return 'Int%d' % (max(existing_bits, new_bits))
-        elif existing_type.startswith('Float') and new_type.startswith('Float'):
-            existing_bits = int(existing_type[5:])
-            new_bits = int(new_type[5:])
-            return 'Float%d' % (max(existing_bits, new_bits))
-        elif existing_type == 'Date' and new_type == 'DateTime':
-            return new_type
-        elif existing_type == 'DateTime' and new_type == 'Date':
-            return existing_type
-        return 'String'
-
     @staticmethod
     def _flatten_array(arr, prefix=''):
         result = {}
@@ -273,7 +247,7 @@ class Cursor(object):
                         self.ddl('alter table %s add column %s %s' % (table, doc_field, doc_type))
                         ddled = True
                     elif doc_field in table_schema and table_schema[doc_field] != doc_type:
-                        new_type = self.generalize_type(table_schema[doc_field], doc_type)
+                        new_type = self.formatter.generalize_type(table_schema[doc_field], doc_type)
                         if new_type != table_schema[doc_field]:
                             logging.info('Modifying %s with %s %s' % (table, doc_field, new_type))
                             self.ddl('alter table %s modify column %s %s' % (table, doc_field, new_type))
@@ -300,7 +274,7 @@ class Cursor(object):
                 if f not in doc_schema:
                     doc_schema[f] = t
                 elif doc_schema[f] != t:
-                    doc_schema[f] = self.generalize_type(doc_schema[f], t)
+                    doc_schema[f] = self.formatter.generalize_type(doc_schema[f], t)
 
         fields = doc_schema.keys()
         types = [doc_schema[f] for f in fields]

@@ -141,10 +141,23 @@ class TestNewUnitTests(unittest.TestCase):
         i = 0
         for left in types:
             for right in types:
-                result = self.cursor.generalize_type(left, right)
+                result = self.cursor.formatter.generalize_type(left, right)
                 assert result == results[i]
 
-                result = self.cursor.generalize_type('Array(%s)' % left, 'Array(%s)' % right)
+                result = self.cursor.formatter.generalize_type('Array(%s)' % left, 'Array(%s)' % right)
                 assert result == 'Array(%s)' % results[i]
 
                 i += 1
+
+    def test_array_generalization(self):
+        result = self.cursor.formatter.clickhousetypefrompython([1, 2], 'test')
+        assert result == 'Array(Int64)'
+
+        result = self.cursor.formatter.clickhousetypefrompython([0.1, 0.2], 'test')
+        assert result == 'Array(Float64)'
+
+        result = self.cursor.formatter.clickhousetypefrompython([1, 0.2], 'test')
+        assert result == 'Array(Float64)'
+
+        result = self.cursor.formatter.clickhousetypefrompython([1, False], 'test')
+        assert result == 'Array(String)'
