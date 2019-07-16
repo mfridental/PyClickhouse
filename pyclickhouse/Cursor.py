@@ -241,28 +241,33 @@ class Cursor(object):
                 table_fields, table_types = self.get_schema(table)
                 table_schema = dict(zip(table_fields, table_types))
                 ddled = False
+                new_types = []
                 for doc_field, doc_type in zip(fields, types):
                     if doc_field not in table_schema:
                         logging.info('Extending %s with %s %s' % (table, doc_field, doc_type))
                         self.ddl('alter table %s add column %s %s' % (table, doc_field, doc_type))
                         ddled = True
+                        new_types.append(doc_type)
                     elif doc_field in table_schema and table_schema[doc_field] != doc_type:
                         new_type = self.formatter.generalize_type(table_schema[doc_field], doc_type)
                         if new_type != table_schema[doc_field]:
                             logging.info('Modifying %s with %s %s' % (table, doc_field, new_type))
                             self.ddl('alter table %s modify column %s %s' % (table, doc_field, new_type))
                             ddled = True
+                        new_types.append(new_type)
+                    else:
+                        new_types.append(doc_type)
 
                 if ddled:
                     self.ddl('optimize table %s' % table)
 
-                return ddled
+                return fields, types
             except Exception as e:
                 tries += 1
 
         raise Exception('Cannot ensure target schema in %s, %s' % (table, e.message))
 
-    def store_documents(self, table, documents, schema_update_time = 60):
+    def store_documents(self, table, documents):
         """Store dictionaries or objects into table, extending the table schema if needed. If the type of some value in
         the documents contradicts with the existing column type in clickhouse, it will be converted to String to
         accomodate all possible values"""
@@ -279,8 +284,7 @@ class Cursor(object):
         fields = doc_schema.keys()
         types = [doc_schema[f] for f in fields]
 
-        if self._ensure_schema(table, fields, types):
-            time.sleep(schema_update_time)
+        fields, types = self._ensure_schema(table, fields, types)
         tries = 0
         while tries < 5:
             try:
