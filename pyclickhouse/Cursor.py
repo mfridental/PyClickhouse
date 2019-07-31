@@ -190,31 +190,38 @@ class Cursor(object):
         return  ([x['name'] for x in self.fetchall()], [x['type'] for x in self.fetchall()])
 
     @staticmethod
-    def _flatten_array(arr, prefix=''):
+    def _flatten_array(arr, prefix='', path=[]):
         result = {}
+        mapping = {}
+
         try:
             for i, element in enumerate(arr):
                 if element is None or (hasattr(element, '__len__') and len(element) == 0):
                     continue
                 if hasattr(element, 'items'):
-                    for k, v in Cursor._flatten_dict(element, prefix, allow_arrays=False).items():
+                    r, m = Cursor._flatten_dict(element, prefix, path, allow_arrays=False)
+                    for k, v in r.items():
                         if k not in result:
                             result[k] = [None] * len(arr)
                         result[k][i] = v
+                    mapping.update(m)
                 elif hasattr(element, '__iter__'):
                     raise NestingLevelTooHigh()
                 else:
                     if prefix not in result:
                         result[prefix] = [None]*len(arr)
                     result[prefix][i] = element
+                    mapping[prefix] = '&'.join(['%s=%s' % x for x in path])
         except NestingLevelTooHigh:
             result[prefix+'_json'] = ujson.dumps(arr)
+            mapping[prefix+'_json'] = '&'.join(['%s=%s' % x for x in path[:-1]+[(path[-1][0], 'json')]])
 
-        return result
+        return result, mapping
 
     @staticmethod
-    def _flatten_dict(doc, prefix='', allow_arrays=True):
+    def _flatten_dict(doc, prefix='', path=[], allow_arrays=True):
         result = {}
+        mapping = {}
 
         if prefix != '':
             prefix += '_'
@@ -223,18 +230,23 @@ class Cursor(object):
             if v is None or (hasattr(v, '__len__') and len(v) == 0):
                 continue
             if hasattr(v, 'items'):
-                result.update(Cursor._flatten_dict(v, prefix + k))
+                r, m = Cursor._flatten_dict(v, prefix + k, path + [(k, 'dict')])
+                result.update(r)
+                mapping.update(m)
             elif hasattr(v, '__iter__'):
                 if allow_arrays:
-                    result.update(Cursor._flatten_array(v, prefix + k))
+                    r, m = Cursor._flatten_array(v, prefix + k, path + [(k, 'array')])
+                    result.update(r)
+                    mapping.update(m)
                 else:
                     raise NestingLevelTooHigh()
             else:
                 result[prefix+k] = v
+                mapping[prefix+k] = '&'.join(['%s=%s' % x for x in path+[(k,'scalar')]])
 
-        return result
+        return result, mapping
 
-    def _ensure_schema(self, table, fields, types):
+    def _ensure_schema(self, table, fields, types, commentmap=None):
         tries = 0
         while tries < 5:
             try:
@@ -246,6 +258,8 @@ class Cursor(object):
                     if doc_field not in table_schema:
                         logging.info('Extending %s with %s %s' % (table, doc_field, doc_type))
                         self.ddl('alter table %s add column %s %s' % (table, doc_field, doc_type))
+                        if commentmap and doc_field in commentmap:
+                            self.ddl("alter table %s comment column %s '%s'" % (table, doc_field, commentmap[doc_field]))
                         ddled = True
                         new_types.append(doc_type)
                     elif doc_field in table_schema and table_schema[doc_field] != doc_type:
@@ -253,6 +267,9 @@ class Cursor(object):
                         if new_type != table_schema[doc_field]:
                             logging.info('Modifying %s with %s %s' % (table, doc_field, new_type))
                             self.ddl('alter table %s modify column %s %s' % (table, doc_field, new_type))
+                            if commentmap and doc_field in commentmap:
+                                self.ddl(
+                                    "alter table %s comment column %s '%s'" % (table, doc_field, commentmap[doc_field]))
                             ddled = True
                         new_types.append(new_type)
                     else:
@@ -271,9 +288,15 @@ class Cursor(object):
         """Store dictionaries or objects into table, extending the table schema if needed. If the type of some value in
         the documents contradicts with the existing column type in clickhouse, it will be converted to String to
         accomodate all possible values"""
-        documents = [Cursor._flatten_dict(doc) for doc in documents]
-        doc_schema = {}
+        flattened = []
+        commentmap = {}
         for doc in documents:
+            f, m = Cursor._flatten_dict(doc)
+            commentmap.update(m)
+            flattened.append(f)
+
+        doc_schema = {}
+        for doc in flattened:
             doc_fields, doc_types = self.formatter.get_schema(doc)
             for f, t in zip(doc_fields, doc_types):
                 if f not in doc_schema:
@@ -284,11 +307,11 @@ class Cursor(object):
         fields = doc_schema.keys()
         types = [doc_schema[f] for f in fields]
 
-        fields, types = self._ensure_schema(table, fields, types)
+        fields, types = self._ensure_schema(table, fields, types, commentmap)
         tries = 0
         while tries < 5:
             try:
-                self.bulkinsert(table, documents, fields, types)
+                self.bulkinsert(table, flattened, fields, types)
                 return
             except Exception as e:
                 if 'bad version' in e.message:  # can happen if we're inserting data while some other process is changing the table
@@ -296,3 +319,65 @@ class Cursor(object):
                 else:
                     raise
         raise e
+
+
+    @staticmethod
+    def _set_on_path(target, path, val):
+        if len(path) == 0:
+            raise Exception('Unexpected logical condition with path %s' % path)
+        part_key, part_type = path[0].split('=')
+        if part_type == 'dict':
+            if part_key not in target:
+                target[part_key] = {}
+            Cursor._set_on_path(target[part_key], path[1:], val)
+        elif part_type == 'array':
+            if len(path) == 1: # last one, means scalars
+                target[part_key] = val
+            else:
+                if part_key not in target:
+                    target[part_key] = [None] * len(val)
+                for i, v in enumerate(val):
+                    if i >= len(target[part_key]):
+                        raise Exception('Arrays of unequal size, %s' % path)
+                    if target[part_key][i] is None:
+                        target[part_key][i] = dict()
+                    Cursor._set_on_path(target[part_key][i], path[1:], v)
+        elif part_type == 'json' and val is not None:
+            target[part_key] = ujson.loads(val)
+        elif val is not None:
+            target[part_key] = val
+
+    @staticmethod
+    def _unflatten_dict(val, mapping):
+        unflattened = {}
+        for k, v in val.items():
+            if k in mapping:
+                path = mapping[k].split('&')
+                Cursor._set_on_path(unflattened, path, v)
+            else:
+                unflattened[k] = v
+        return unflattened
+
+    def retrieve_documents(self, query, table_names=[]):
+        self.select(query)
+        rows = self.fetchall()
+
+        if len(rows) == 0:
+            return []
+
+        self.select("""
+        select name, any(comment) _comment, uniq(comment) un
+        from system.columns
+        where name in (%s) and length(comment) > 0 %s 
+        group by name
+        """ % (
+            ','.join(["'%s'" % x for x in rows[0].keys()]),
+            ('and table in (%s)' % ','.join(["'%s'" % x for x in table_names])) if len(table_names) > 0 else ''
+                    ))
+        mapping = {}
+        for map in self.fetchall():
+            if map['un'] > 1:
+                raise Exception('Cannot find a unique mapping for %s' % map['name'])
+            mapping[map['name']] = map['_comment']
+
+        return [Cursor._unflatten_dict(row, mapping) for row in rows]
