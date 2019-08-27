@@ -165,6 +165,12 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
         )
 
     def formatfield(self, value, type, inarray = False):
+        if type.startswith('LowCardinality(') and type.endswith(')'):
+            type = type[len('LowCardinality('):-1]
+
+        if type.startswith('Nullable(') and type.endswith(')'):
+            type = type[len('Nullable('):-1]
+
         if type in ['UInt8','UInt16', 'UInt32', 'UInt64','Int8','Int16','Int32','Int64']:
             if value is None:
                 return '0'
@@ -225,6 +231,12 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
 
 
     def unformatfield(self, value, type):
+        if type.startswith('LowCardinality(') and type.endswith(')'):
+            type = type[len('LowCardinality('):-1]
+
+        if type.startswith('Nullable(') and type.endswith(')'):
+            type = type[len('Nullable('):-1]
+
         if type in ['UInt8','UInt16', 'UInt32', 'UInt64','Int8','Int16','Int32','Int64']:
             return int(value)
         if type in ['String']:
