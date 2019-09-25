@@ -17,7 +17,7 @@ from pyclickhouse.Cursor import Cursor
 class Connection(object):
     """
     Represents a Connection to Clickhouse. Because HTTP protocol is used underneath, no real Connection is
-        created. The Connection is rather an temporary object to create cursors.
+    created. The Connection is rather an temporary object to create cursors.
 
     Clickhouse does not support transactions, thus there is no commit method. Inserts are commited automatically
     if they don't produce errors.
