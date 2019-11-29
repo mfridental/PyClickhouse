@@ -8,12 +8,24 @@ from decimal import Decimal
 class NestingLevelTooHigh(Exception):
     pass
 
+
+
 class DictionaryAdapter(object):
+    def getfields(self, dict):
+        return dict.keys()
+
+    def getval(self, dict, field):
+        if field in dict:
+            return dict[field]
+        else:
+            return None
+
+class MultilevelDictionaryAdapter(object):
     def getfields(self, doc, prefix='', had_array=False):
         result = []
-        for k, v in doc.iteritems():
+        for k, v in doc.items():
             if isinstance(v, dict):
-                result.extend(self.getfields(v, prefix + k + '.', had_array))
+                result.extend(self.getfields(v, prefix + k + '_', had_array))
             elif hasattr(v, '__iter__'):
                 if had_array:
                     raise NestingLevelTooHigh()
@@ -21,10 +33,10 @@ class DictionaryAdapter(object):
                 for tmp in v:
                     if isinstance(tmp, dict):
                         try:
-                            subkeys = self.getfields(tmp, prefix + k + '.', True)
+                            subkeys = self.getfields(tmp, prefix + k + '_', True)
                             dict_keys = dict_keys.union(set(subkeys))
                         except NestingLevelTooHigh:
-                            result.append(prefix + k + '.json')
+                            result.append(prefix + k + '_json')
                             break
                     else:
                         result.append(prefix + k)
@@ -59,6 +71,33 @@ class ObjectAdapter(object):
         return getattr(obj, field)
 
 class TabSeparatedWithNamesAndTypesFormatter(object):
+    def generalize_type(self, existing_type, new_type):
+        arr = 'Array('
+        if existing_type == new_type:
+            return existing_type
+        elif existing_type.startswith(arr) and new_type.startswith(arr):
+            return 'Array(%s)' % self.generalize_type(existing_type[len(arr):-1], new_type[len(arr):-1])
+        elif existing_type.startswith(arr) or new_type.startswith(arr):
+            return 'String'
+        elif existing_type.startswith('Int') and new_type.startswith('Float'):
+            return new_type
+        elif existing_type.startswith('Float') and new_type.startswith('Int'):
+            return existing_type
+        elif existing_type.startswith('Int') and new_type.startswith('Int'):
+            existing_bits = int(existing_type[3:])
+            new_bits = int(new_type[3:])
+            return 'Int%d' % (max(existing_bits, new_bits))
+        elif existing_type.startswith('Float') and new_type.startswith('Float'):
+            existing_bits = int(existing_type[5:])
+            new_bits = int(new_type[5:])
+            return 'Float%d' % (max(existing_bits, new_bits))
+        elif existing_type == 'Date' and new_type == 'DateTime':
+            return new_type
+        elif existing_type == 'DateTime' and new_type == 'Date':
+            return existing_type
+        return 'String'
+
+
     def clickhousetypefrompython(self, pythonobj, name):
         if pythonobj is None:
             raise Exception('Cannot infer type of "%s" from None' % name)
@@ -87,6 +126,10 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
                 return 'Array(' + list(possibletypes)[0]  + ')'
             elif len(possibletypes) == 0:
                 raise Exception('Cannot infer type of "%s" from empty array' % name)
+            elif len(possibletypes) == 2:
+                possibletypes = list(possibletypes)
+                newtype = self.generalize_type(possibletypes[0], possibletypes[1])
+                return 'Array(%s)' % newtype
             else:
                 raise Exception('Array in "%s" contains values of contradicting types %s' % (name, ', '.join(possibletypes)))
         raise Exception('Cannot infer type of "%s", type not supported for: %s, %s' % (name, repr(pythonobj), type(pythonobj)))
@@ -116,12 +159,18 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
             adapter = ObjectAdapter()
 
         return fields, types, '%s\n%s\n%s' % (
-            '\t'.join(fields),
+            '\t'.join([x.encode('utf8') for x in fields]),
             '\t'.join(types),
             '\n'.join(['\t'.join([self.formatfield(adapter.getval(r, f), t) for f, t in zip(fields, types)]) for r in rows])
         )
 
     def formatfield(self, value, type, inarray = False):
+        if type.startswith('LowCardinality(') and type.endswith(')'):
+            type = type[len('LowCardinality('):-1]
+
+        if type.startswith('Nullable(') and type.endswith(')'):
+            type = type[len('Nullable('):-1]
+
         if type in ['UInt8','UInt16', 'UInt32', 'UInt64','Int8','Int16','Int32','Int64']:
             if value is None:
                 return '0'
@@ -129,6 +178,21 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
                 return '1' if value else '0'
             return str(value)
         if type in ['String', 'IPv6']:
+            # Because String is also a type for columns having values of various type depending on row, the value
+            # parameter might be just anything and has to be converted first
+            if not isinstance(value, basestring):
+                if isinstance(value, int) or isinstance(value, float) or isinstance(value, bool):
+                    value = str(value)
+                elif isinstance(value, dt.date):
+                    value = value.strftime('%Y-%m-%d')
+                elif isinstance(value, dt.datetime):
+                    value = value.strftime('%Y-%m-%d %H:%M:%S')
+                else:
+                    value = ujson.dumps(value)
+
+            if sys.version_info[0] == 2 and isinstance(value, unicode):
+                value = value.encode('utf8')
+
             if value is None:
                 escaped = ''
             else:
@@ -167,6 +231,12 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
 
 
     def unformatfield(self, value, type):
+        if type.startswith('LowCardinality(') and type.endswith(')'):
+            type = type[len('LowCardinality('):-1]
+
+        if type.startswith('Nullable(') and type.endswith(')'):
+            type = type[len('Nullable('):-1]
+
         if type in ['UInt8','UInt16', 'UInt32', 'UInt64','Int8','Int16','Int32','Int64']:
             return int(value)
         if type in ['String', 'IPv6']:

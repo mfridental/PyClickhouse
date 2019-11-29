@@ -2,10 +2,12 @@ from __future__ import absolute_import, print_function
 
 import datetime as dt
 import logging
+import time
 import re
+import ujson
 
 from pyclickhouse.FilterableCache import FilterableCache
-from pyclickhouse.formatter import TabSeparatedWithNamesAndTypesFormatter
+from pyclickhouse.formatter import TabSeparatedWithNamesAndTypesFormatter, NestingLevelTooHigh
 
 
 class Cursor(object):
@@ -75,7 +77,7 @@ class Cursor(object):
     You can pass parameters to the queries, by marking their places in the query using %s, for example
     cursor.select('SELECT count() FROM table WHERE field=%s', 123)
         """
-        if re.match (r'^.+?\s+format\s+\w+$', query.lower()) is None:
+        if re.match(r'^.+?\s+format\s+\w+$', query.lower()) is None:
             query += ' FORMAT TabSeparatedWithNamesAndTypes'
             self.executewithpayload(query, None, True, *args)
         else:
@@ -109,8 +111,15 @@ class Cursor(object):
         escaping. If omitted, the types will be inferred automatically from the first element of the values list.
         """
         fields, types, payload = self.formatter.format(values, fields, types)
-        self.executewithpayload('INSERT INTO %s (%s) FORMAT TabSeparatedWithNamesAndTypes' %
-                                (table, ','.join(fields)), payload, False)
+        if len(payload) < 2000000000:
+            self.executewithpayload('INSERT INTO %s (%s) FORMAT TabSeparatedWithNamesAndTypes' %
+                                    (table, ','.join(fields)), payload, False)
+        else:
+            batch = int(2000000000.0/len(payload)*len(values))
+            if batch < 1:
+                raise Exception("Payload of the values is larger than 2Gb, Clickhouse won't probably accept that")
+            for i in range(0, len(values), batch):
+                self.bulkinsert(table, values[i:i+batch], fields, types)
 
     def executewithpayload(self, query, payload, parseresult, *args):
         """
@@ -142,7 +151,6 @@ class Cursor(object):
         Fetch all resulting rows of a select query as a list of dictionaries.
         """
         return self.lastparsedresult
-
 
     def cached_select(self, query, filter):
         """
@@ -182,92 +190,194 @@ class Cursor(object):
         return  ([x['name'] for x in self.fetchall()], [x['type'] for x in self.fetchall()])
 
     @staticmethod
-    def _remove_nones(dict_or_array):
-        if isinstance(dict_or_array, dict):
-            result = {}
-            for k, v in dict_or_array.iteritems():
-                if v is not None:
-                    a, b = Cursor._remove_nones(v)
-                    if a:
-                        if len(b) > 0:
-                            result[k] = b
-                    else:
-                        result[k] = v
-            return True, result
-        elif hasattr(dict_or_array, '__iter__'):
-            result = []
-            for v in dict_or_array:
-                if v is not None:
-                    a, b = Cursor._remove_nones(v)
-                    if a:
-                        if len(b) > 0:
-                            result.append(b)
-                    else:
-                        result.append(v)
-            return True, result
-        else:
-            return False, 0
+    def _flatten_array(arr, prefix='', path=[]):
+        result = {}
+        mapping = {}
 
-    def generalize_type(self, existing_type, new_type):
-        arr = 'Array('
-        if existing_type == new_type:
-            return existing_type
-        elif existing_type.startswith(arr) and new_type.startswith(arr):
-            return 'Array(%s)' % self.generalize_type(existing_type[len(arr):-1], new_type[len(arr):-1])
-        elif existing_type.startswith(arr) or new_type.startswith(arr):
-            return 'String'
-        elif existing_type.startswith('Int') and new_type.startswith('Float'):
-            return new_type
-        elif existing_type.startswith('Float') and new_type.startswith('Int'):
-            return existing_type
-        elif existing_type.startswith('Int') and new_type.startswith('Int'):
-            existing_bits = int(existing_type[3:])
-            new_bits = int(new_type[3:])
-            return 'Int%d' % (max(existing_bits, new_bits))
-        elif existing_type.startswith('Float') and new_type.startswith('Float'):
-            existing_bits = int(existing_type[5:])
-            new_bits = int(new_type[5:])
-            return 'Float%d' % (max(existing_bits, new_bits))
-        elif existing_type == 'Date' and new_type == 'DateTime':
-            return new_type
-        elif existing_type == 'DateTime' and new_type == 'Date':
-            return existing_type
-        return 'String'
+        try:
+            for i, element in enumerate(arr):
+                if element is None or (hasattr(element, '__len__') and len(element) == 0):
+                    continue
+                if hasattr(element, 'items'):
+                    r, m = Cursor._flatten_dict(element, prefix, path, allow_arrays=False)
+                    for k, v in r.items():
+                        if k not in result:
+                            result[k] = [None] * len(arr)
+                        result[k][i] = v
+                    mapping.update(m)
+                elif hasattr(element, '__iter__'):
+                    raise NestingLevelTooHigh()
+                else:
+                    if prefix not in result:
+                        result[prefix] = [None]*len(arr)
+                    result[prefix][i] = element
+                    mapping[prefix] = '&'.join(['%s=%s' % x for x in path])
+        except NestingLevelTooHigh:
+            result[prefix+'_json'] = ujson.dumps(arr)
+            mapping[prefix+'_json'] = '&'.join(['%s=%s' % x for x in path[:-1]+[(path[-1][0], 'json')]])
+
+        return result, mapping
+
+    @staticmethod
+    def _flatten_dict(doc, prefix='', path=[], allow_arrays=True):
+        result = {}
+        mapping = {}
+
+        if prefix != '':
+            prefix += '_'
+
+        for k,v in doc.items():
+            if v is None or (hasattr(v, '__len__') and len(v) == 0):
+                continue
+            if hasattr(v, 'items'):
+                r, m = Cursor._flatten_dict(v, prefix + k, path + [(k, 'dict')])
+                result.update(r)
+                mapping.update(m)
+            elif hasattr(v, '__iter__'):
+                if allow_arrays:
+                    r, m = Cursor._flatten_array(v, prefix + k, path + [(k, 'array')])
+                    result.update(r)
+                    mapping.update(m)
+                else:
+                    raise NestingLevelTooHigh()
+            else:
+                result[prefix+k] = v
+                mapping[prefix+k] = '&'.join(['%s=%s' % x for x in path+[(k,'scalar')]])
+
+        return result, mapping
+
+    def _ensure_schema(self, table, fields, types, commentmap=None):
+        tries = 0
+        while tries < 5:
+            try:
+                table_fields, table_types = self.get_schema(table)
+                table_schema = dict(zip(table_fields, table_types))
+                ddled = False
+                new_types = []
+                for doc_field, doc_type in zip(fields, types):
+                    if doc_field not in table_schema:
+                        logging.info('Extending %s with %s %s' % (table, doc_field, doc_type))
+                        self.ddl('alter table %s add column %s %s' % (table, doc_field, doc_type))
+                        if commentmap and doc_field in commentmap:
+                            self.ddl("alter table %s comment column %s '%s'" % (table, doc_field, commentmap[doc_field]))
+                        ddled = True
+                        new_types.append(doc_type)
+                    elif doc_field in table_schema and table_schema[doc_field] != doc_type:
+                        new_type = self.formatter.generalize_type(table_schema[doc_field], doc_type)
+                        if new_type != table_schema[doc_field]:
+                            logging.info('Modifying %s with %s %s' % (table, doc_field, new_type))
+                            self.ddl('alter table %s modify column %s %s' % (table, doc_field, new_type))
+                            if commentmap and doc_field in commentmap:
+                                self.ddl(
+                                    "alter table %s comment column %s '%s'" % (table, doc_field, commentmap[doc_field]))
+                            ddled = True
+                        new_types.append(new_type)
+                    else:
+                        new_types.append(doc_type)
+
+                if ddled:
+                    self.ddl('optimize table %s' % table)
+
+                return fields, new_types
+            except Exception as e:
+                tries += 1
+
+        raise Exception('Cannot ensure target schema in %s, %s' % (table, e.message))
 
     def store_documents(self, table, documents):
         """Store dictionaries or objects into table, extending the table schema if needed. If the type of some value in
         the documents contradicts with the existing column type in clickhouse, it will be converted to String to
         accomodate all possible values"""
-        _, documents = Cursor._remove_nones(documents)
-        table_fields, table_types = self.get_schema(table)
-        table_schema = dict(zip(table_fields, table_types))
-        adds = {}
-        modifies = {}
+        flattened = []
+        commentmap = {}
         for doc in documents:
+            f, m = Cursor._flatten_dict(doc)
+            commentmap.update(m)
+            flattened.append(f)
+
+        doc_schema = {}
+        for doc in flattened:
             doc_fields, doc_types = self.formatter.get_schema(doc)
-            for doc_field, doc_type in zip(doc_fields, doc_types):
-                if doc_field not in table_schema and doc_field not in adds:
-                     adds[doc_field] = doc_type
-                elif doc_field in table_schema and table_schema[doc_field] != doc_type:
-                    modifies[doc_field] = self.generalize_type(table_schema[doc_field], doc_type)
-                elif doc_field in modifies and modifies[doc_field] != doc_type:
-                    modifies[doc_field] = self.generalize_type(modifies[doc_field], doc_type)
-                elif doc_field in adds and adds[doc_field] != doc_type:
-                    adds[doc_field] = self.generalize_type(table_schema[doc_field], doc_type)
+            for f, t in zip(doc_fields, doc_types):
+                if f not in doc_schema:
+                    doc_schema[f] = t
+                elif doc_schema[f] != t:
+                    doc_schema[f] = self.formatter.generalize_type(doc_schema[f], t)
 
-        for field, type in adds.iteritems():
-            logging.info('Extending %s with %s %s' % (table, field, type))
-            self.ddl('alter table %s add column %s %s' % (table, field, type))
-            table_fields.append(field)
-            table_types.append(type)
+        fields = doc_schema.keys()
+        types = [doc_schema[f] for f in fields]
 
-        table_schema = dict(zip(table_fields, table_types))
+        fields, types = self._ensure_schema(table, fields, types, commentmap)
+        tries = 0
+        while tries < 5:
+            try:
+                self.bulkinsert(table, flattened, fields, types)
+                return
+            except Exception as e:
+                if 'bad version' in e.message:  # can happen if we're inserting data while some other process is changing the table
+                    tries += 1
+                else:
+                    raise
+        raise e
 
-        for field, type in modifies.iteritems():
-            if type != table_schema[field]:
-                logging.info('Modifying %s with %s %s' % (table, field, type))
-                self.ddl('alter table %s modify column %s %s' % (table, field, type))
-                table_fields.append(field)
-                table_types.append(type)
 
-        self.bulkinsert(table, documents, table_fields, table_types)
+    @staticmethod
+    def _set_on_path(target, path, val):
+        if len(path) == 0:
+            raise Exception('Unexpected logical condition with path %s' % path)
+        part_key, part_type = path[0].split('=')
+        if part_type == 'dict':
+            if part_key not in target:
+                target[part_key] = {}
+            Cursor._set_on_path(target[part_key], path[1:], val)
+        elif part_type == 'array':
+            if len(path) == 1: # last one, means scalars
+                target[part_key] = val
+            else:
+                if part_key not in target:
+                    target[part_key] = [None] * len(val)
+                for i, v in enumerate(val):
+                    if i >= len(target[part_key]):
+                        raise Exception('Arrays of unequal size, %s' % path)
+                    if target[part_key][i] is None:
+                        target[part_key][i] = dict()
+                    Cursor._set_on_path(target[part_key][i], path[1:], v)
+        elif part_type == 'json' and val is not None:
+            target[part_key] = ujson.loads(val)
+        elif val is not None:
+            target[part_key] = val
+
+    @staticmethod
+    def _unflatten_dict(val, mapping):
+        unflattened = {}
+        for k, v in val.items():
+            if k in mapping:
+                path = mapping[k].split('&')
+                Cursor._set_on_path(unflattened, path, v)
+            else:
+                unflattened[k] = v
+        return unflattened
+
+    def retrieve_documents(self, query, table_names=[]):
+        self.select(query)
+        rows = self.fetchall()
+
+        if len(rows) == 0:
+            return []
+
+        self.select("""
+        select name, any(comment) _comment, uniq(comment) un
+        from system.columns
+        where name in (%s) and length(comment) > 0 %s 
+        group by name
+        """ % (
+            ','.join(["'%s'" % x for x in rows[0].keys()]),
+            ('and table in (%s)' % ','.join(["'%s'" % x for x in table_names])) if len(table_names) > 0 else ''
+                    ))
+        mapping = {}
+        for map in self.fetchall():
+            if map['un'] > 1:
+                raise Exception('Cannot find a unique mapping for %s' % map['name'])
+            mapping[map['name']] = map['_comment']
+
+        return [Cursor._unflatten_dict(row, mapping) for row in rows]
