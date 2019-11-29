@@ -7,6 +7,7 @@ import urllib.request, urllib.parse, urllib.error
 import multiprocessing
 import logging
 import traceback
+import base64
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -74,40 +75,38 @@ class Connection(object):
         Connection.Pool_connections = pool_connections
         Connection.Pool_maxsize = pool_maxsize
 
-
     def _call(self, query = None, payload = None):
         """
         Private method, use Cursor to make calls to Clickhouse.
         """
         try:
+            credentials = self.username + ':' + self.password
+            header = {'Authorization': 'Basic %s' % (base64.b64encode(credentials.encode('ISO-8859-1')),)}
+
             if query is None:
-                return Connection.Session.get('http://%s:%s' % (self.host, self.port), timeout = self.timeout)
+                return Connection.Session.get('http://%s:%s' % (self.host, self.port), timeout=self.timeout, headers=header)
 
             if payload is None:
-                url = 'http://%s:%s?user=%s&password=%s%s' % \
+                url = 'http://%s:%s?%s' % \
                                     (
                                         self.host,
                                         str(self.port),
-                                        urllib.parse.quote_plus(self.username),
-                                        urllib.parse.quote_plus(self.password),
                                         self.clickhouse_settings_encoded
                                     )
                 if isinstance(query, str):
                     query = query.encode('utf8')
-                r = Connection.Session.post(url, query, timeout = self.timeout)
+                r = Connection.Session.post(url, query, timeout=self.timeout, headers=header)
             else:
-                url = 'http://%s:%s?user=%s&password=%s%s' % \
+                url = 'http://%s:%s?%s' % \
                                     (
                                         self.host,
                                         str(self.port),
-                                        urllib.parse.quote_plus(self.username),
-                                        urllib.parse.quote_plus(self.password),
                                         self.clickhouse_settings_encoded
                                     )
                 if isinstance(payload, str):
                     payload = payload.encode('utf8')
                 payload = query.encode('utf-8') + '\n'.encode() + payload  # on python 3, all parts must be encoded (no implicit conversion)
-                r = Connection.Session.post(url, payload, timeout = self.timeout)
+                r = Connection.Session.post(url, payload, timeout=self.timeout, headers=header)
             if not r.ok:
                 raise Exception(r.content)
             return r

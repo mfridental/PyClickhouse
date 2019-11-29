@@ -177,7 +177,7 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
             if isinstance(value, bool):
                 return '1' if value else '0'
             return str(value)
-        if type in ['String']:
+        if type in ['String', 'IPv6']:
             # Because String is also a type for columns having values of various type depending on row, the value
             # parameter might be just anything and has to be converted first
             if not isinstance(value, basestring):
@@ -239,7 +239,7 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
 
         if type in ['UInt8','UInt16', 'UInt32', 'UInt64','Int8','Int16','Int32','Int64']:
             return int(value)
-        if type in ['String']:
+        if type in ['String', 'IPv6']:
             return value.replace('\\n','\n').replace('\\t','\t').replace('\\\\','\\')
         if type in ['Float32', 'Float64']:
             return float(value)
