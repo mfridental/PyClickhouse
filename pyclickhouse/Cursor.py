@@ -295,57 +295,57 @@ class Cursor(object):
                 self.bulkinsert(table, flattened, fields, types)
                 return
             except Exception as e:
-                if 'bad version' in e.message:  # can happen if we're inserting data while some other process is changing the table
+                if ('message' in e and 'bad version' in e.message) or 'bad version' in str(e):  # can happen if we're inserting data while some other process is changing the table
                     tries += 1
                 else:
                     raise
 
-        def store_only_changed_documents(self, table, documents, primary_keys, datetimefield, ignore_fields=None,
-                                         where='1=1', nullablelambda=lambda fieldname: False):
-            """
-            Compares "documents" in the "table" with the latest data retrieved from the table, using grouping by the
-            "primary_keys" (list of field names) and getting argMax values sorted by "datetimefield". Compares the existing data with the data passed
-            in "documents" ignoring the "datetimefield" as well as "ignore_fields", and inserts a new record only if some
-            fields have changed. Returns the number of really inserted rows.
+    def store_only_changed_documents(self, table, documents, primary_keys, datetimefield, ignore_fields=None,
+                                     where='1=1', nullablelambda=lambda fieldname: False):
+        """
+        Compares "documents" in the "table" with the latest data retrieved from the table, using grouping by the
+        "primary_keys" (list of field names) and getting argMax values sorted by "datetimefield". Compares the existing data with the data passed
+        in "documents" ignoring the "datetimefield" as well as "ignore_fields", and inserts a new record only if some
+        fields have changed. Returns the number of really inserted rows.
 
-            Use this method only for really small tables.
-            """
+        Use this method only for really small tables.
+        """
 
-            table_fields, documents, table_types = self.prepare_document_table(table, documents, nullablelambda)
+        table_fields, documents, table_types = self.prepare_document_table(table, documents, nullablelambda)
 
 
-            if ignore_fields is None:
-                ignore_fields = list()
+        if ignore_fields is None:
+            ignore_fields = list()
 
-            ignore_fields.append(datetimefield)
-            ignore_fields.extend(primary_keys)
+        ignore_fields.append(datetimefield)
+        ignore_fields.extend(primary_keys)
 
-            self.select("""
-            select %s, %s
-            from %s
-            where %s
-            group by %s
-            """ % (
-                    ','.join(primary_keys),
-                    ','.join(
-            ['argMax(%s,%s) as %s' % (x, datetimefield, x) for x in table_fields if x not in ignore_fields]),
-                    table,
-                    where,
-                    ','.join(primary_keys)
-            ))
+        self.select("""
+        select %s, %s
+        from %s
+        where %s
+        group by %s
+        """ % (
+                ','.join(primary_keys),
+                ','.join(
+        ['argMax(%s,%s) as %s' % (x, datetimefield, x) for x in table_fields if x not in ignore_fields]),
+                table,
+                where,
+                ','.join(primary_keys)
+        ))
 
-            existing = dict()
-            for row in self.fetchall():
-                pk = tuple([row[x] for x in primary_keys])
-                existing[pk] = row
+        existing = dict()
+        for row in self.fetchall():
+            pk = tuple([row[x] for x in primary_keys])
+            existing[pk] = row
 
-            changed_documents = list()
-            for doc in documents:
-                pk = tuple([doc[x] for x in primary_keys])
+        changed_documents = list()
+        for doc in documents:
+            pk = tuple([doc[x] for x in primary_keys])
 
-                if pk not in existing:
-                    changed_documents.append(doc)
-                    continue
+            if pk not in existing:
+                changed_documents.append(doc)
+                continue
 
             row = existing[pk]
             for field in table_fields:
@@ -358,10 +358,10 @@ class Cursor(object):
                     break
 
 
-            if len(changed_documents) > 0:
-                self.bulkinsert(table, changed_documents, table_fields, table_types)
+        if len(changed_documents) > 0:
+            self.bulkinsert(table, changed_documents, table_fields, table_types)
 
-            return len(changed_documents)
+        return len(changed_documents)
 
     def prepare_document_table(self, table, documents, nullablelambda=lambda fieldname: False):
         flattened = []
