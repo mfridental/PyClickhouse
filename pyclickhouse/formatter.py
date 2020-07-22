@@ -148,7 +148,7 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
                 result = 'Array(' + type  + ')'
         if result is None:
             raise Exception('Cannot infer type of "%s", type not supported for: %s, %s' % (name, repr(pythonobj), type(pythonobj)))
-        if nullablelambda(name):
+        if nullablelambda(name) and not result.startswith('Array'):
             result = 'Nullable(%s)' % result
         return result
 

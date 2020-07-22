@@ -248,6 +248,7 @@ class Cursor(object):
 
     def _ensure_schema(self, table, fields, types, commentmap=None):
         tries = 0
+        message = ''
         while tries < 5:
             try:
                 table_fields, table_types = self.get_schema(table)
@@ -281,8 +282,9 @@ class Cursor(object):
                 return fields, new_types
             except Exception as e:
                 tries += 1
+                message = e.message
 
-        raise Exception('Cannot ensure target schema in %s, %s' % (table, e.message))
+        raise Exception('Cannot ensure target schema in %s, %s' % (table, message))
 
     def store_documents(self, table, documents, nullablelambda=lambda fieldname: False):
         """Store dictionaries or objects into table, extending the table schema if needed. If the type of some value in
