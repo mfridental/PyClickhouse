@@ -9,7 +9,7 @@ class TestNewUnitTests(unittest.TestCase):
     """Test compatibility of insert operations with Unicode text"""
 
     def setUp(self):
-        self.conn = pyclickhouse.Connection('localhost:8123')
+        self.conn = pyclickhouse.Connection('localhost:8124')
         self.cursor=self.conn.cursor()
 
     def test_array_serialization(self):
@@ -216,3 +216,19 @@ class TestNewUnitTests(unittest.TestCase):
         assert result == 'Nullable(Int64)'
         result = self.cursor.formatter.generalize_type('Float64', 'Nullable(Int64)')
         assert result == 'Nullable(Float64)'
+
+    def test_noextend(self):
+        self.cursor.ddl('drop table if exists TestNoExtend ')
+        self.cursor.ddl('create table TestNoExtend(id String, historydate Date) Engine=MergeTree(historydate, id, 8192)')
+
+        doc = {'id':'first', 'historydate':dt.date.today(), 'extra':5}
+        self.cursor.store_documents('TestNoExtend', [doc])
+        fields, types = self.cursor.get_schema('TestNoExtend')
+        assert 'extra' in fields
+
+        doc = {'id':'second', 'historydate':dt.date.today(), 'noextra':42}
+        self.cursor.store_documents('TestNoExtend', [doc], extendtable=False)
+        fields, types = self.cursor.get_schema('TestNoExtend')
+        assert 'noextra' not in fields
+
+        self.cursor.ddl('drop table if exists TestNoExtend ')

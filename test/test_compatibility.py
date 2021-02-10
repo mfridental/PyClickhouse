@@ -7,7 +7,7 @@ class TestPy23Compatibility(unittest.TestCase):
     """Test compatibility of insert operations with Unicode text"""
 
     def setUp(self):
-        self.conn = pyclickhouse.Connection('localhost:8123')
+        self.conn = pyclickhouse.Connection('localhost:8124')
         self.cursor=self.conn.cursor()
         self.cursor.ddl("create database if not exists test")
         self.cursor.ddl("drop table if exists test")

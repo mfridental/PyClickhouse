@@ -86,14 +86,18 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
             if new_type.startswith(nu):
                 new_type = new_type[len(nu):-1]
             return 'Nullable(%s)' % self.generalize_type(existing_type, new_type)
-        elif existing_type.startswith('Int') and new_type.startswith('Float'):
+        elif (existing_type.startswith('Int') or existing_type.startswith('UInt')) and new_type.startswith('Float'):
             return new_type
-        elif existing_type.startswith('Float') and new_type.startswith('Int'):
+        elif existing_type.startswith('Float') and (new_type.startswith('Int') or new_type.startswith('UInt')):
             return existing_type
         elif existing_type.startswith('Int') and new_type.startswith('Int'):
             existing_bits = int(existing_type[3:])
             new_bits = int(new_type[3:])
             return 'Int%d' % (max(existing_bits, new_bits))
+        elif existing_type.startswith('UInt') and new_type.startswith('UInt'):
+            existing_bits = int(existing_type[4:])
+            new_bits = int(new_type[4:])
+            return 'UInt%d' % (max(existing_bits, new_bits))
         elif existing_type.startswith('Float') and new_type.startswith('Float'):
             existing_bits = int(existing_type[5:])
             new_bits = int(new_type[5:])
@@ -103,6 +107,43 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
         elif existing_type == 'DateTime' and new_type == 'Date':
             return existing_type
         return 'String'
+
+    def is_compatible_type(self, existing_type, new_type):
+        arr = 'Array('
+        nu = 'Nullable('
+        if existing_type == new_type:
+            return True
+        elif existing_type.startswith(arr) and new_type.startswith(arr):
+            return self.is_compatible_type(existing_type[len(arr):-1], new_type[len(arr):-1])
+        elif existing_type.startswith(arr) or new_type.startswith(arr):
+            return False
+        elif existing_type.startswith(nu) or new_type.startswith(nu):
+            if existing_type.startswith(nu):
+                existing_type = existing_type[len(nu):-1]
+            if new_type.startswith(nu):
+                new_type = new_type[len(nu):-1]
+            return self.is_compatible_type(existing_type, new_type)
+        elif (existing_type.startswith('Int') or existing_type.startswith('UInt')) and new_type.startswith('Float'):
+            return False
+        elif existing_type.startswith('Float') and (new_type.startswith('Int') or new_type.startswith('UInt')):
+            return True
+        elif existing_type.startswith('Int') and new_type.startswith('Int'):
+            existing_bits = int(existing_type[3:])
+            new_bits = int(new_type[3:])
+            return new_bits <= existing_bits
+        elif existing_type.startswith('UInt') and new_type.startswith('UInt'):
+            existing_bits = int(existing_type[4:])
+            new_bits = int(new_type[4:])
+            return new_bits <= existing_bits
+        elif existing_type.startswith('Float') and new_type.startswith('Float'):
+            existing_bits = int(existing_type[5:])
+            new_bits = int(new_type[5:])
+            return new_bits <= existing_bits
+        elif existing_type == 'Date' and new_type == 'DateTime':
+            return False
+        elif existing_type == 'DateTime' and new_type == 'Date':
+            return False
+        return False
 
 
     def clickhousetypefrompython(self, pythonobj, name, nullablelambda=lambda fieldname: False):

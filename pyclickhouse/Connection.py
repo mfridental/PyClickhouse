@@ -27,7 +27,7 @@ class Connection(object):
     Pool_connections=1
     Pool_maxsize=10
 
-    def __init__(self, host, port=None, username='default', password='', pool_connections=1, pool_maxsize=10, timeout=5, clickhouse_settings='', auth_method=None):
+    def __init__(self, host, port=None, username='default', password='', pool_connections=1, pool_maxsize=10, timeout=5, clickhouse_settings='', auth_method=None, use_own_session=False):
         """
         Create a new Connection object. Because HTTP protocol is used underneath, no real Connection is
         created. The Connection is rather an temporary object to create cursors.
@@ -66,16 +66,28 @@ class Connection(object):
         if len(clickhouse_settings) > 0:
             self.clickhouse_settings_encoded = '&' + '&'.join(['%s=%s' % pair for pair in list(clickhouse_settings.items())])
 
-        if Connection.Session is None or pool_connections != Connection.Pool_connections or pool_maxsize != Connection.Pool_maxsize:
-            Connection.reopensession(pool_connections, pool_maxsize)
+        self.pool_connections = pool_connections
+        self.pool_maxsize = pool_maxsize
+
+        if use_own_session:
+            self.session = Connection._newsession(self.pool_connections, self.pool_maxsize)
+        else:
+            if Connection.Session is None or pool_connections != Connection.Pool_connections or pool_maxsize != Connection.Pool_maxsize:
+                Connection.reopensession(pool_connections, pool_maxsize)
+            self.session = None
+
+    @staticmethod
+    def _newsession(pool_connections=1, pool_maxsize=10):
+        session = requests.Session()
+        session.mount('http://', HTTPAdapter(pool_connections=pool_connections, pool_maxsize=pool_maxsize, max_retries=3))
+        session.mount('https://', HTTPAdapter(pool_connections=pool_connections, pool_maxsize=pool_maxsize, max_retries=3))
+        return session
 
     @staticmethod
     def reopensession(pool_connections=1, pool_maxsize=10):
         if Connection.Session is not None:
             Connection.Session.close()
-        Connection.Session = requests.Session()
-        Connection.Session.mount('http://', HTTPAdapter(pool_connections=pool_connections, pool_maxsize=pool_maxsize, max_retries=3))
-        Connection.Session.mount('https://', HTTPAdapter(pool_connections=pool_connections, pool_maxsize=pool_maxsize, max_retries=3))
+        Connection.Session = Connection._newsession(pool_connections, pool_maxsize)
         Connection.Pool_connections = pool_connections
         Connection.Pool_maxsize = pool_maxsize
 
@@ -92,8 +104,12 @@ class Connection(object):
             else:
                 header = {}
 
+            session = self.session
+            if session is None:
+                session = Connection.Session
+
             if query is None:
-                return Connection.Session.get('http://%s:%s' % (self.host, self.port), timeout=self.timeout, headers=header)
+                return session.get('http://%s:%s' % (self.host, self.port), timeout=self.timeout, headers=header)
 
             if payload is None:
                 url = 'http://%s:%s?%s' % \
@@ -104,7 +120,7 @@ class Connection(object):
                                     )
                 if isinstance(query, str):
                     query = query.encode('utf8')
-                r = Connection.Session.post(url, query, timeout=self.timeout, headers=header)
+                r = session.post(url, query, timeout=self.timeout, headers=header)
             else:
                 url = 'http://%s:%s?%s' % \
                                     (
@@ -115,7 +131,7 @@ class Connection(object):
                 if isinstance(payload, str):
                     payload = payload.encode('utf8')
                 payload = query.encode('utf-8') + '\n'.encode() + payload  # on python 3, all parts must be encoded (no implicit conversion)
-                r = Connection.Session.post(url, payload, timeout=self.timeout, headers=header)
+                r = session.post(url, payload, timeout=self.timeout, headers=header)
             if not r.ok:
                 raise Exception('Query %s raised error %s' % (query, r.content))
             return r
@@ -123,10 +139,14 @@ class Connection(object):
             self.close()
             try:
                 if 'BadStatusLine' in str(e):  # e.g. ConnectionError has no attr. message
-                    Connection.reopensession()
+                    if self.session is not None:
+                        self.session.close()
+                        self.session = Connection._newsession(self.pool_connections, self.pool_maxsize)
+                    else:
+                        Connection.reopensession()
             except:
                 pass
-            logging.error(traceback.format_exc())
+            logging.exception('When executing query %s' % query)
             raise
 
     def open(self):
@@ -146,7 +166,10 @@ class Connection(object):
          after calling this method.
         """
         self.state = 'closed'
-        Connection.Session.close()
+        if self.session is not None:
+            self.session.close()
+        else:
+            Connection.Session.close()
 
 
     def cursor(self):

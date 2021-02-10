@@ -7,7 +7,7 @@ from pyclickhouse import Connection
 
 class TestSimple(unittest.TestCase):
     def test_simple(self):
-        conn = Connection('localhost:8123')
+        conn = Connection('localhost:8124')
         conn.open()
         cur = conn.cursor()
 

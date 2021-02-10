@@ -34,6 +34,7 @@ class Cursor(object):
     You can pass parameters to the queries, by marking their places in the query using %s, for example
     cursor.select('SELECT count() FROM table WHERE field=%s', 123)
     """
+
     def __init__(self, connection):
         """
         Create new Cursor object.
@@ -115,11 +116,11 @@ class Cursor(object):
             self.executewithpayload('INSERT INTO %s (%s) FORMAT TabSeparatedWithNamesAndTypes' %
                                     (table, ','.join(fields)), payload, False)
         else:
-            batch = int(2000000000.0/len(payload)*len(values))
+            batch = int(2000000000.0 / len(payload) * len(values))
             if batch < 1:
                 raise Exception("Payload of the values is larger than 2Gb, Clickhouse won't probably accept that")
             for i in range(0, len(values), batch):
-                self.bulkinsert(table, values[i:i+batch], fields, types)
+                self.bulkinsert(table, values[i:i + batch], fields, types)
 
     def executewithpayload(self, query, payload, parseresult, *args):
         """
@@ -130,7 +131,7 @@ class Cursor(object):
         self.lastresult = self.connection._call(query, payload)
         if parseresult and self.lastresult is not None:
             self.lastparsedresult = self.formatter.unformat(self.lastresult.content)
-            self.lastresult = None # hint GC to free memory
+            self.lastresult = None  # hint GC to free memory
         else:
             self.lastparsedresult = None
         self.rowindex = -1
@@ -141,7 +142,7 @@ class Cursor(object):
         """
         if self.lastparsedresult is None:
             return self.lastresult.content
-        if self.rowindex >= len(self.lastparsedresult)-1:
+        if self.rowindex >= len(self.lastparsedresult) - 1:
             return None
         self.rowindex += 1
         return self.lastparsedresult[self.rowindex]
@@ -167,7 +168,7 @@ class Cursor(object):
         :return: The same as fetchall, a list of dictionaries
         """
         keys = sorted(filter.keys())
-        tag = query+''.join(keys)
+        tag = query + ''.join(keys)
 
         if not self.cache.has_dataset(tag):
             self.select(query)
@@ -187,7 +188,8 @@ class Cursor(object):
             tablename = table[0]
 
         self.select('select name, type from system.columns where database=%s and table=%s', database, tablename)
-        return  ([x['name'] for x in self.fetchall()], [x['type'] for x in self.fetchall()])
+        result = self.fetchall()
+        return ([x['name'] for x in result], [x['type'] for x in result])
 
     @staticmethod
     def _flatten_array(arr, prefix='', path=[]):
@@ -209,12 +211,12 @@ class Cursor(object):
                     raise NestingLevelTooHigh()
                 else:
                     if prefix not in result:
-                        result[prefix] = [None]*len(arr)
+                        result[prefix] = [None] * len(arr)
                     result[prefix][i] = element
                     mapping[prefix] = '&'.join(['%s=%s' % x for x in path])
         except NestingLevelTooHigh:
-            result[prefix+'_json'] = ujson.dumps(arr)
-            mapping[prefix+'_json'] = '&'.join(['%s=%s' % x for x in path[:-1]+[(path[-1][0], 'json')]])
+            result[prefix + '_json'] = ujson.dumps(arr)
+            mapping[prefix + '_json'] = '&'.join(['%s=%s' % x for x in path[:-1] + [(path[-1][0], 'json')]])
 
         return result, mapping
 
@@ -226,7 +228,7 @@ class Cursor(object):
         if prefix != '':
             prefix += '_'
 
-        for k,v in doc.items():
+        for k, v in doc.items():
             if v is None or (hasattr(v, '__len__') and len(v) == 0):
                 continue
             if hasattr(v, 'items'):
@@ -241,26 +243,38 @@ class Cursor(object):
                 else:
                     raise NestingLevelTooHigh()
             else:
-                result[prefix+k] = v
-                mapping[prefix+k] = '&'.join(['%s=%s' % x for x in path+[(k,'scalar')]])
+                result[prefix + k] = v
+                mapping[prefix + k] = '&'.join(['%s=%s' % x for x in path + [(k, 'scalar')]])
 
         return result, mapping
 
-    def _ensure_schema(self, table, fields, types, commentmap=None):
+    def _ensure_schema(self, table, fields, types, commentmap=None, usebuffertable=None):
         tries = 0
         message = ''
+        dropped = False
         while tries < 5:
             try:
                 table_fields, table_types = self.get_schema(table)
                 table_schema = dict(zip(table_fields, table_types))
+                if usebuffertable is not None:
+                    buffer_fields, buffer_types = self.get_schema(table + '_Buffer')
+                    buffer_schema = dict(zip(buffer_fields, buffer_types))
                 ddled = False
                 new_types = []
                 for doc_field, doc_type in zip(fields, types):
+                    if usebuffertable is not None and \
+                            (doc_field not in buffer_schema or buffer_schema[doc_field] != doc_type) and \
+                            not dropped:
+                        self.ddl('drop table if exists %s_Buffer' % table)
+                        dropped = True
+                        # it will be re-created in the store_documents
+
                     if doc_field not in table_schema:
                         logging.info('Extending %s with %s %s' % (table, doc_field, doc_type))
                         self.ddl('alter table %s add column %s %s' % (table, doc_field, doc_type))
                         if commentmap and doc_field in commentmap:
-                            self.ddl("alter table %s comment column %s '%s'" % (table, doc_field, commentmap[doc_field]))
+                            self.ddl(
+                                "alter table %s comment column %s '%s'" % (table, doc_field, commentmap[doc_field]))
                         ddled = True
                         new_types.append(doc_type)
                     elif doc_field in table_schema and table_schema[doc_field] != doc_type:
@@ -282,39 +296,54 @@ class Cursor(object):
                 return fields, new_types
             except Exception as e:
                 tries += 1
-                message = e.message
+                message = e.message if hasattr(e, 'message') else str(e)
 
         raise Exception('Cannot ensure target schema in %s, %s' % (table, message))
 
-    def store_documents(self, table, documents, nullablelambda=lambda fieldname: False):
-        """Store dictionaries or objects into table, extending the table schema if needed. If the type of some value in
-        the documents contradicts with the existing column type in clickhouse, it will be converted to String to
-        accomodate all possible values"""
-        fields, flattened, types = self.prepare_document_table(table, documents, nullablelambda)
+    def store_documents(self, table, documents,
+                        nullablelambda=lambda fieldname: False,
+                        usebuffertable=None,
+                        extendtable=True):
+        """Store dictionaries or objects into table, optionally extending the table schema if needed. If the type of 
+        some value in the documents contradicts with the existing column type in clickhouse, it either will be 
+        converted to String to accomodate all possible values, if extendtable is True, or the value of an 
+        incompatible type will be omitted. If usebuffertable is passed (a string with the Buffer engine 
+        definition), a new buffer table will be created if not exists, and used if possible. The buffer table will 
+        be dropped and recreated, if new columns have to be added to the underlying table."""
+        fields, flattened, types = self.prepare_document_table(table, documents, nullablelambda, usebuffertable,
+                                                               extendtable)
+
+        if usebuffertable is not None:
+            self.ddl("""
+            CREATE TABLE IF NOT EXISTS %s_Buffer AS %s 
+            ENGINE = %s""" % (table, table, usebuffertable))
+
         tries = 0
         while tries < 5:
             try:
-                self.bulkinsert(table, flattened, fields, types)
+                self.bulkinsert(table if usebuffertable is None else table + '_Buffer', flattened, fields, types)
                 return
             except Exception as e:
-                if ('message' in e and 'bad version' in e.message) or 'bad version' in str(e):  # can happen if we're inserting data while some other process is changing the table
+                if (hasattr(e, 'message') and 'bad version' in e.message) or 'bad version' in str(
+                        e):  # can happen if we're inserting data while some other process is changing the table
                     tries += 1
                 else:
                     raise
 
     def store_only_changed_documents(self, table, documents, primary_keys, datetimefield, ignore_fields=None,
-                                     where='1=1', nullablelambda=lambda fieldname: False):
+                                     where='1=1', nullablelambda=lambda fieldname: False, usebuffertable=None):
         """
         Compares "documents" in the "table" with the latest data retrieved from the table, using grouping by the
-        "primary_keys" (list of field names) and getting argMax values sorted by "datetimefield". Compares the existing data with the data passed
+        "primary_keys" (list of field names) and getting argMax values sorted by "datetimefield". Compares the 
+        existing data with the data passed
         in "documents" ignoring the "datetimefield" as well as "ignore_fields", and inserts a new record only if some
         fields have changed. Returns the number of really inserted rows.
 
         Use this method only for really small tables.
         """
 
-        table_fields, documents, table_types = self.prepare_document_table(table, documents, nullablelambda)
-
+        table_fields, documents, table_types = self.prepare_document_table(table, documents, nullablelambda,
+                                                                           usebuffertable=usebuffertable)
 
         if ignore_fields is None:
             ignore_fields = list()
@@ -328,12 +357,12 @@ class Cursor(object):
         where %s
         group by %s
         """ % (
-                ','.join(primary_keys),
-                ','.join(
-        ['argMax(%s,%s) as %s' % (x, datetimefield, x) for x in table_fields if x not in ignore_fields]),
-                table,
-                where,
-                ','.join(primary_keys)
+            ','.join(primary_keys),
+            ','.join(
+                ['argMax(%s,%s) as %s' % (x, datetimefield, x) for x in table_fields if x not in ignore_fields]),
+            table,
+            where,
+            ','.join(primary_keys)
         ))
 
         existing = dict()
@@ -356,22 +385,19 @@ class Cursor(object):
                 if field not in doc:
                     continue
                 if field not in row or row[field] != doc[field]:
+                    logging.info('Document with primary key %s has a change in field %s, old value %s, new value %s' % (
+                        pk, field, row[field], doc[field]
+                    ))
                     changed_documents.append(doc)
                     break
 
-
         if len(changed_documents) > 0:
-            self.bulkinsert(table, changed_documents, table_fields, table_types)
+            self.bulkinsert(table if usebuffertable is None else table + '_Buffer', changed_documents, table_fields,
+                            table_types)
 
         return len(changed_documents)
 
-    def prepare_document_table(self, table, documents, nullablelambda=lambda fieldname: False):
-        flattened = []
-        commentmap = {}
-        for doc in documents:
-            f, m = Cursor._flatten_dict(doc)
-            commentmap.update(m)
-            flattened.append(f)
+    def _generalize_document_types(self, flattened, nullablelambda=lambda fieldname: False):
         doc_schema = {}
         for doc in flattened:
             doc_fields, doc_types = self.formatter.get_schema(doc, nullablelambda)
@@ -382,7 +408,49 @@ class Cursor(object):
                     doc_schema[f] = self.formatter.generalize_type(doc_schema[f], t)
         fields = doc_schema.keys()
         types = [doc_schema[f] for f in fields]
-        fields, types = self._ensure_schema(table, fields, types, commentmap)
+        return fields, types
+
+    def _flatten_documents(self, documents):
+        flattened = []
+        commentmap = {}
+        for doc in documents:
+            f, m = Cursor._flatten_dict(doc)
+            commentmap.update(m)
+            flattened.append(f)
+        return commentmap, flattened
+
+    def would_change_schema(self, table, documents, nullablelambda=lambda fieldname: False):
+        """Whether a subsequent call to prepare_document_table or store_documents would need
+        to change table schema to accomondate the documents."""
+
+        commentmap, flattened = self._flatten_documents(documents)
+        fields, types = self._generalize_document_types(flattened, nullablelambda)
+
+        table_fields, table_types = self.get_schema(table)
+        table_schema = dict(zip(table_fields, table_types))
+        for doc_field, doc_type in zip(fields, types):
+            if doc_field not in table_schema or table_schema[doc_field] != doc_type:
+                return True
+
+        return False
+
+    def prepare_document_table(self, table, documents, 
+                               nullablelambda=lambda fieldname: False, 
+                               usebuffertable=None,
+                               extendtable=True):
+        commentmap, flattened = self._flatten_documents(documents)
+        if extendtable:
+            fields, types = self._generalize_document_types(flattened, nullablelambda)
+            fields, types = self._ensure_schema(table, fields, types, commentmap, usebuffertable)
+        else:
+            fields, types = self.get_schema(table)
+            table_schema = dict(zip(fields, types))
+            for doc in flattened:
+                doc_fields, doc_types = self.formatter.get_schema(doc, nullablelambda)
+                for f, t in list(zip(doc_fields, doc_types)):
+                    if f not in table_schema or not self.formatter.is_compatible_type(table_schema[f], t):
+                        del doc[f]
+
         return fields, flattened, types
 
     @staticmethod
@@ -395,7 +463,7 @@ class Cursor(object):
                 target[part_key] = {}
             Cursor._set_on_path(target[part_key], path[1:], val)
         elif part_type == 'array':
-            if len(path) == 1: # last one, means scalars
+            if len(path) == 1:  # last one, means scalars
                 target[part_key] = val
             else:
                 if part_key not in target:
@@ -437,7 +505,7 @@ class Cursor(object):
         """ % (
             ','.join(["'%s'" % x for x in rows[0].keys()]),
             ('and table in (%s)' % ','.join(["'%s'" % x for x in table_names])) if len(table_names) > 0 else ''
-                    ))
+        ))
         mapping = {}
         for map in self.fetchall():
             if map['un'] > 1:
@@ -445,3 +513,19 @@ class Cursor(object):
             mapping[map['name']] = map['_comment']
 
         return [Cursor._unflatten_dict(row, mapping) for row in rows]
+
+    def change_and_duplicate(self, table, where, modifiers):
+        """
+        Select all columns of rows found by where, modify them using the SQL expressions passed in the
+        modifiers dict (key: field name, value: expression), and insert them back in the same table.
+
+        For example: change_and_duplicate('default.Items', 'id=234', {'is_deleted': '1', 'index': 'index+1'})
+        """
+        fields, _ = self.get_schema(table)
+        sel_expr = ', '.join([modifiers[x] + ' as ' + x if x in modifiers else x for x in fields])
+        self.insert("""
+        insert into %s
+        select %s
+        from %s
+        where %s
+        """ % (table, sel_expr, table, where))
