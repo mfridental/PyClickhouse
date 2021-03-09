@@ -27,7 +27,8 @@ class Connection(object):
     Pool_connections=1
     Pool_maxsize=10
 
-    def __init__(self, host, port=None, username='default', password='', pool_connections=1, pool_maxsize=10, timeout=5, clickhouse_settings='', auth_method=None, use_own_session=False):
+    def __init__(self, host, port=None, username='default', password='', pool_connections=1, pool_maxsize=10,
+                 timeout=5, clickhouse_settings='', auth_method=None, use_own_session=False):
         """
         Create a new Connection object. Because HTTP protocol is used underneath, no real Connection is
         created. The Connection is rather an temporary object to create cursors.
@@ -60,7 +61,7 @@ class Connection(object):
         self.state = 'closed'
         self.timeout = timeout
         if auth_method is None and (username != 'default' or password != ''):
-            auth_method = 'legacy'
+            auth_method = 'x'
         self.auth_method = auth_method
         self.clickhouse_settings_encoded = ''
         if len(clickhouse_settings) > 0:
