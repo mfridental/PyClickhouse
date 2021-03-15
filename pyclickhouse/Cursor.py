@@ -522,10 +522,13 @@ class Cursor(object):
         For example: change_and_duplicate('default.Items', 'id=234', {'is_deleted': '1', 'index': 'index+1'})
         """
         fields, _ = self.get_schema(table)
-        sel_expr = ', '.join([modifiers[x] + ' as ' + x if x in modifiers else x for x in fields])
+        sel_expr = ', '.join([modifiers[x] + ' as ' + x if x in modifiers else "`"+x+"`" for x in fields])
         self.insert("""
         insert into %s
         select %s
-        from %s
-        where %s
+        from (
+            select *
+            from %s
+            where %s
+        )
         """ % (table, sel_expr, table, where))

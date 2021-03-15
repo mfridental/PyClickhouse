@@ -3,10 +3,10 @@ from setuptools import setup
 REQUIRED=['requests', 'future', 'six', 'ujson']
 
 setup(name='pyclickhouse3',
-      version='0.9.12',
+      version='0.9.13',
       description='Minimalist Clickhouse Python driver with an API roughly resembling Python DB API 2.0 specification.',
       url='https://github.com/mfridental/PyClickhouse',
-      download_url='https://github.com/mfridental/PyClickhouse/archive/0.9.12.tar.gz',
+      download_url='https://github.com/mfridental/PyClickhouse/archive/0.9.13.tar.gz',
       keywords=['Clickhouse', 'Database', 'Driver'],
       classifiers=[],
       author='Maxim Fridental (Maintainer)',
