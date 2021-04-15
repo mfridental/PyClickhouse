@@ -129,6 +129,8 @@ class Connection(object):
                                         str(self.port),
                                         self.clickhouse_settings_encoded
                                     )
+                if not payload.endswith('\n'):
+                    payload = payload + '\n'
                 if isinstance(payload, str):
                     payload = payload.encode('utf8')
                 payload = query.encode('utf-8') + '\n'.encode() + payload  # on python 3, all parts must be encoded (no implicit conversion)
