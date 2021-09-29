@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import print_function
 from pyclickhouse import Connection
 import datetime as dt
 

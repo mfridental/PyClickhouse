@@ -1,8 +1,3 @@
-from builtins import str
-# https://python-future.org/compatible_idioms.html#urllib-module
-from future.standard_library import install_aliases
-install_aliases()
-
 import urllib.request, urllib.parse, urllib.error
 import multiprocessing
 import logging
