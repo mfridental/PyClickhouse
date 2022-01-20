@@ -33,11 +33,13 @@ class Cursor(object):
     cursor.select('SELECT count() FROM table WHERE field=%s', 123)
     """
 
-    def __init__(self, connection):
+    def __init__(self, connections):
         """
         Create new Cursor object.
         """
-        self.connection = connection
+        self.connections = connections
+        self.connection_index = 0
+        self.failed_connections = []
         self.lastresult = None
         self.lastparsedresult = None
         self.formatter = TabSeparatedWithNamesAndTypesFormatter()
@@ -120,13 +122,34 @@ class Cursor(object):
             for i in range(0, len(values), batch):
                 self.bulkinsert(table, values[i:i + batch], fields, types)
 
+    def _callroundrobin(self, query, payload):
+        if len(self.connections) == 1 and len(self.failed_connections) == 0:
+            return self.connections[0]._call(query, payload)
+
+        for tries in range(10):
+            try:
+                r = self.connections[self.connection_index]._call(query, payload)
+                return r
+            except:
+                self.failed_connections.append(self.connections[self.connection_index])
+                self.connections.remove(self.connections[self.connection_index])
+                if len(self.connections) == 0:
+                    self.connections = self.failed_connections
+                    self.failed_connections = []
+                if tries == 9:
+                    raise
+            finally:
+                self.connection_index += 1
+                if self.connection_index >= len(self.connections):
+                    self.connection_index = 0
+
     def executewithpayload(self, query, payload, parseresult, *args):
         """
         Private method.
         """
         if args is not None and len(args) > 0:
             query = query % tuple([Cursor._escapeparameter(x) for x in args])
-        self.lastresult = self.connection._call(query, payload)
+        self.lastresult = self._callroundrobin(query, payload)
         if parseresult and self.lastresult is not None:
             self.lastparsedresult = self.formatter.unformat(self.lastresult.content)
             self.lastresult = None  # hint GC to free memory

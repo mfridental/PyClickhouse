@@ -2,7 +2,7 @@
 import time
 from multiprocessing import Process
 
-from pyclickhouse import Connection
+from pyclickhouse import Connection, Cursor
 
 def timeouttest():
     conn = Connection('localhost:8124')
@@ -41,6 +41,22 @@ def loadtest(num):
         i += 1
         print(i)
 
+def multiconnecttest():
+    conn1 = Connection('localhost:8124')
+    conn2 = Connection('localhost:8124')
+    cur = Cursor([conn1, conn2])
+    cur.select('select now()')
+    print(cur.connection_index, cur.fetchone())
+    cur.select('select now()')
+    print(cur.connection_index, cur.fetchone())
+    cur = Cursor([Connection('unresolvable:8123'), conn1])
+    cur.select('select now()')
+    print(cur.fetchone())
+    cur.select('select now()')
+    print(cur.fetchone())
+    cur.select('select now()')
+    print(cur.fetchone())
+
 #timeouttest()
 #loadtest(10000)
-
+multiconnecttest()

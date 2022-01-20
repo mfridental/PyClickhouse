@@ -175,7 +175,7 @@ class Connection(object):
         :return: a Cursor
         """
         self.open()
-        return Cursor(self)
+        return Cursor([self])
 
 
 
