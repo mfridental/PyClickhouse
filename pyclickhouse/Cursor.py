@@ -84,6 +84,22 @@ class Cursor(object):
         else:
             self.executewithpayload(query, None, False, *args)
 
+    def select_as_dataframe(self, query, *args):
+        """
+        Execute a select query and parse results into a pandas dataframe
+
+        You can only use FORMAT TabSeparatedWithNamesAndTypes in your query, or omit it, in
+    which case it will be added to the query automatically.
+
+    You can pass parameters to the queries, by marking their places in the query using %s, for example
+    cursor.select_as_dataframe('SELECT count() FROM table WHERE field=%s', 123)
+        """
+        if re.match(r'^.+?\s+format\s+\w+$', query.lower()) is None:
+            query += ' FORMAT TabSeparatedWithNamesAndTypes'
+        self.executewithpayload(query, None, False, *args)
+        result = self.formatter.unformat_as_dataframe(self.lastresult.content)
+        return result
+
     def insert(self, query, *args):
         """
         Execute an insert query with data packed inside of the query parameter. Note that using "bulkinsert" can

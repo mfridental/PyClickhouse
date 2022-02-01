@@ -1,8 +1,18 @@
+import logging
+import numpy as np
+
 import ujson
 
 import sys
 import datetime as dt
 from decimal import Decimal
+
+import io
+
+try:
+    import pandas as pd
+except:
+    logging.info('Pandas is not installed, Cursor.select_as_dataframe is not available.')
 
 class NestingLevelTooHigh(Exception):
     pass
@@ -365,6 +375,72 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
             return [self.unformatfield(x, type[6:-1]) for x in [y[1:-1] if len(y) >= 2 and y[0]=="'" and y[-1]=="'" else y for y in parts]]
         raise Exception('Unexpected error, field cannot be unformatted, %s, %s' % (str(value), type))
 
+    def unformat_as_dataframe(self, payload_b):
+        if sys.version_info[0] == 3:
+            payload = payload_b.decode('utf8')
+        else:
+            payload = payload_b
+        split = payload.split('\n')
+        if len(split) < 3:
+            raise Exception('Unexpected error, no result')
+
+        fields = split[0].split('\t')
+        types = split[1].split('\t')
+
+        dtypes = dict()
+        converters = dict()
+
+        def to_datetime(value):
+            if value.startswith("'"):
+                value = value[1:]
+            if value.endswith("'"):
+                value = value[:-1]
+            if value == '0000-00-00 00:00:00' or value == '1970-01-01 86:28:16':
+                return None
+            return dt.datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
+
+        def to_date(value):
+            if value.startswith("'"):
+                value = value[1:]
+            if value.endswith("'"):
+                value = value[:-1]
+            if value == '0000-00-00' or value == '1970-01-01':
+                return None
+            return dt.datetime.strptime(value, '%Y-%m-%d').date()
+
+        for field, type in zip(fields, types):
+            if type.startswith('LowCardinality(') and type.endswith(')'):
+                type = type[len('LowCardinality('):-1]
+
+            if type.startswith('Nullable(') and type.endswith(')'):
+                type = type[len('Nullable('):-1]
+
+            if 'Array' in type:
+                dtypes[field] = np.object
+            elif type in ['UInt8', 'UInt16', 'UInt32', 'UInt64', 'Int8', 'Int16', 'Int32', 'Int64']:
+                dtypes[field] = np.float # np.int does not support NANs
+            elif type in ['String', 'IPv6']:
+                dtypes[field] = np.str
+            elif type in ['Float32', 'Float64']:
+                dtypes[field] = np.float
+            elif type == 'Date':
+                converters[field] = to_date
+            elif type == 'DateTime':
+                converters[field] = to_datetime
+            else:
+                raise Exception('type %s is not supported' % type)
+
+
+        df = pd.read_csv(
+            io.StringIO(payload),
+            sep='\t',
+            na_values='\\N',
+            dtype = dtypes,
+            converters= converters,
+            header=0,
+            skiprows=[1])
+
+        return df
 
     def unformat(self, payload_b):
         if sys.version_info[0] == 3:
