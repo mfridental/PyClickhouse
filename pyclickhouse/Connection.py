@@ -23,7 +23,8 @@ class Connection(object):
     Pool_maxsize=10
 
     def __init__(self, host, port=None, username='default', password='', pool_connections=1, pool_maxsize=10,
-                 timeout=5, clickhouse_settings='', auth_method=None, use_own_session=False):
+                 timeout=5, clickhouse_settings='', auth_method=None, use_own_session=False, secure=None,
+                 server_cert=True):
         """
         Create a new Connection object. Because HTTP protocol is used underneath, no real Connection is
         created. The Connection is rather an temporary object to create cursors.
@@ -41,6 +42,12 @@ class Connection(object):
         :param pool_connections: optional number of TCP connections to pre-create when the Connection object is created.
         :param pool_maxsize: optional maximum number of TCP-connections this Connection object may make to the Clickhouse host.
         :param auth_method: 'legacy' for the Authorization header, 'x' for the X-ClickHouse-User
+        :param use_own_session: True for creating a session for each Connection object, or False to reuse existing
+        requests Sessions
+        :param secure: whether to use TLS when connecting to the server. It is True by default, if the port is 8443,
+        otherwise it is False by default (you can override the setting by passing the parameter explicitely)
+        :param server_cert: if using TLS, you can pass here the file to CA Bundle or the server self-signed
+        certificate. This parameter will be sent to the parameter "verify" of requests.
         :return: the Connection object
         """
         tmp = host.split(':')
@@ -51,6 +58,10 @@ class Connection(object):
                 self.port = int(tmp[-1])
             else:
                 self.port = 8123
+        if secure is None:
+            secure = self.port == 8443
+        self.secure = 's' if secure else ''
+        self.server_cert = server_cert
         self.username = username
         self.password = password
         self.state = 'closed'
@@ -105,11 +116,13 @@ class Connection(object):
                 session = Connection.Session
 
             if query is None:
-                return session.get('http://%s:%s' % (self.host, self.port), timeout=self.timeout, headers=header)
+                return session.get('http%s://%s:%s' % (self.secure, self.host, self.port), timeout=self.timeout,
+                                   headers=header, verify=self.server_cert)
 
             if payload is None:
-                url = 'http://%s:%s?%s' % \
+                url = 'http%s://%s:%s?%s' % \
                                     (
+                                        self.secure,
                                         self.host,
                                         str(self.port),
                                         self.clickhouse_settings_encoded
@@ -118,8 +131,9 @@ class Connection(object):
                     query = query.encode('utf8')
                 r = session.post(url, query, timeout=self.timeout, headers=header)
             else:
-                url = 'http://%s:%s?%s' % \
+                url = 'http%s://%s:%s?%s' % \
                                     (
+                                        self.secure,
                                         self.host,
                                         str(self.port),
                                         self.clickhouse_settings_encoded
@@ -176,7 +190,4 @@ class Connection(object):
         """
         self.open()
         return Cursor([self])
-
-
-
 
