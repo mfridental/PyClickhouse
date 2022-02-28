@@ -129,7 +129,7 @@ class Connection(object):
                                     )
                 if isinstance(query, str):
                     query = query.encode('utf8')
-                r = session.post(url, query, timeout=self.timeout, headers=header)
+                r = session.post(url, query, timeout=self.timeout, headers=header, verify=self.server_cert)
             else:
                 url = 'http%s://%s:%s?%s' % \
                                     (
@@ -143,7 +143,7 @@ class Connection(object):
                 if isinstance(payload, str):
                     payload = payload.encode('utf8')
                 payload = query.encode('utf-8') + '\n'.encode() + payload  # on python 3, all parts must be encoded (no implicit conversion)
-                r = session.post(url, payload, timeout=self.timeout, headers=header)
+                r = session.post(url, payload, timeout=self.timeout, headers=header, verify=self.server_cert)
             if not r.ok:
                 raise Exception('Query %s raised error %s' % (query, r.content))
             return r
