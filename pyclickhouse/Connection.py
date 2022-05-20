@@ -3,6 +3,7 @@ import multiprocessing
 import logging
 import traceback
 import base64
+import os
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -62,6 +63,8 @@ class Connection(object):
             secure = self.port == 8443
         self.secure = 's' if secure else ''
         self.server_cert = server_cert
+        if isinstance(self.server_cert, str):
+            self.server_cert = os.path.expanduser(self.server_cert)
         self.username = username
         self.password = password
         self.state = 'closed'
