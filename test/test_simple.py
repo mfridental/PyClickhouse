@@ -50,7 +50,8 @@ class TestSimple(unittest.TestCase):
         f23 Array(Float64),
         f24 Array(String),
         f25 Array(Date),
-        f26 Array(DateTime)
+        f26 Array(DateTime),
+        f27 DateTime('UTC')
         )
         engine=Memory
         """)
@@ -65,7 +66,7 @@ class TestSimple(unittest.TestCase):
         [10,12,13], [10,12,13],[10,12,13],[10,12,13],[10,12,13],[10,12,13],[10,12,13],[10,12,13],
         [10.1,12.2,13.3],[10.1,12.2,13.3],
         ['escaping','te\tst'],
-        ['1975-11-10'], ['1975-11-10 02:23:01']
+        ['1975-11-10'], ['1975-11-10 02:23:01'], '1975-11-10'
         )
         """)
 
@@ -99,7 +100,8 @@ class TestSimple(unittest.TestCase):
                 'f23': [111.11],
                 'f24': ['string in array'],
                 'f25': [dt.date.today()],
-                'f26': [dt.datetime.now()]
+                'f26': [dt.datetime.now()],
+                'f27': dt.datetime.utcnow()
             }]
 
         #values = values * 10000
@@ -133,3 +135,10 @@ class TestSimple(unittest.TestCase):
         cnt2 = cur.fetchone()['count()']
 
         assert cnt2 == cnt + 4
+
+        cur.select("""
+        select f27 from simpletest limit 1
+        """)
+        val = cur.fetchone()['f27']
+        assert val.tzname() == 'UTC'
+

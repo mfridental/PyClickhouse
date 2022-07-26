@@ -1,5 +1,6 @@
 import logging
 import numpy as np
+import pytz
 
 import ujson
 
@@ -115,6 +116,10 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
             return new_type
         elif existing_type == 'DateTime' and new_type == 'Date':
             return existing_type
+        elif existing_type.startswith('DateTime(') and new_type == 'DateTime':
+            return existing_type
+        elif existing_type == 'DateTime' and new_type.startswith('DateTime('):
+            return new_type
         return 'String'
 
     def is_compatible_type(self, existing_type, new_type):
@@ -152,6 +157,10 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
             return False
         elif existing_type == 'DateTime' and new_type == 'Date':
             return False
+        elif existing_type.startswith('DateTime(') and new_type == 'DateTime':
+            return True
+        elif existing_type == 'DateTime' and new_type.startswith('DateTime('):
+            return True
         return False
 
 
@@ -176,7 +185,10 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
         elif isinstance(pythonobj, float) or isinstance(pythonobj, Decimal):
             result = 'Float64'
         elif isinstance(pythonobj, dt.datetime):
-            result = 'DateTime'
+            if pythonobj.tzname() is not None:
+                result = "DateTime('%s')" % pythonobj.tzname()
+            else:
+                result = 'DateTime'
         elif isinstance(pythonobj, dt.date):
             result = 'Date'
         elif isinstance(pythonobj, dict):
@@ -288,8 +300,8 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
                     return "'%s'" % escaped
                 else:
                     return escaped
-            if type == 'DateTime':
-                if value is None or value <= dt.datetime(1970,1,2,0,0,0):
+            if type == 'DateTime' or type.startswith('DateTime('):
+                if value is None or value.replace(tzinfo=None) <= dt.datetime(1970,1,2,0,0,0):
                     escaped = '0000-00-00 00:00:00'
                 else:
                     escaped = '%04d-%02d-%02d %02d:%02d:%02d' % (value.year, value.month, value.day, value.hour, value.minute, value.second)
@@ -333,14 +345,17 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
             if value == '0000-00-00' or value == '1970-01-01':
                 return None
             return dt.datetime.strptime(value, '%Y-%m-%d').date()
-        if type == 'DateTime':
+        if type == 'DateTime' or type.startswith('DateTime('):
             if value.startswith("'"):
                 value = value[1:]
             if value.endswith("'"):
                 value = value[:-1]
             if value == '0000-00-00 00:00:00' or value == '1970-01-01 86:28:16':
                 return None
-            return dt.datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
+            tmp = dt.datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
+            if type.startswith('DateTime('):
+                tmp = tmp.astimezone(pytz.timezone(type.split('(')[1][2:-3]))
+            return tmp
         if 'Array' in type:
             if value == '[]':
                 return []
@@ -390,14 +405,27 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
         dtypes = dict()
         converters = dict()
 
-        def to_datetime(value):
-            if value.startswith("'"):
-                value = value[1:]
-            if value.endswith("'"):
-                value = value[:-1]
-            if value == '0000-00-00 00:00:00' or value == '1970-01-01 86:28:16':
-                return None
-            return dt.datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
+        def make_to_datetime(type):
+            if type.startswith('('):
+                tz = pytz.timezone(type.split('(')[1][2:-3])
+                def to_datetime(value):
+                    if value.startswith("'"):
+                        value = value[1:]
+                    if value.endswith("'"):
+                        value = value[:-1]
+                    if value == '0000-00-00 00:00:00' or value == '1970-01-01 86:28:16':
+                        return None
+                    return dt.datetime.strptime(value, '%Y-%m-%d %H:%M:%S').astimezone(tz)
+            else:
+                def to_datetime(value):
+                    if value.startswith("'"):
+                        value = value[1:]
+                    if value.endswith("'"):
+                        value = value[:-1]
+                    if value == '0000-00-00 00:00:00' or value == '1970-01-01 86:28:16':
+                        return None
+                    return dt.datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
+            return to_datetime
 
         def to_date(value):
             if value.startswith("'"):
@@ -425,8 +453,8 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
                 dtypes[field] = np.float
             elif type == 'Date':
                 converters[field] = to_date
-            elif type == 'DateTime':
-                converters[field] = to_datetime
+            elif type == 'DateTime' or type.startswith('DateTime('):
+                converters[field] = make_to_datetime(type)
             else:
                 raise Exception('type %s is not supported' % type)
 
