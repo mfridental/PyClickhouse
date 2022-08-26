@@ -89,7 +89,7 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
         elif existing_type.startswith(arr) and new_type.startswith(arr):
             return 'Array(%s)' % self.generalize_type(existing_type[len(arr):-1], new_type[len(arr):-1])
         elif existing_type.startswith(arr) or new_type.startswith(arr):
-            return 'String'
+            raise Exception('Cannot generalize %s and %s' % (existing_type, new_type))
         elif existing_type.startswith(nu) or new_type.startswith(nu):
             if existing_type.startswith(nu):
                 existing_type = existing_type[len(nu):-1]
