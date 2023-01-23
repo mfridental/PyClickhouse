@@ -1,6 +1,7 @@
 import logging
 import numpy as np
 import pytz
+import ast
 
 import ujson
 
@@ -81,14 +82,25 @@ class ObjectAdapter(object):
         return getattr(obj, field)
 
 class TabSeparatedWithNamesAndTypesFormatter(object):
+    def __init__(self):
+        self.enable_map_datatype = False
+
     def generalize_type(self, existing_type, new_type):
         arr = 'Array('
         nu = 'Nullable('
+        ma = 'Map('
         if existing_type == new_type:
             return existing_type
         elif existing_type.startswith(arr) and new_type.startswith(arr):
             return 'Array(%s)' % self.generalize_type(existing_type[len(arr):-1], new_type[len(arr):-1])
+        elif existing_type.startswith(ma) and new_type.startswith(ma):
+            existing_spec = existing_type[len(ma),-1].split(',')
+            new_spec = new_type[len(ma), -1].split(',')
+            return 'Map(%s,%s)' % (self.generalize_type(existing_spec[0].strip(), new_spec[0].strip()), self.generalize_type(
+                existing_spec[1].strip(), new_spec[1].strip()))
         elif existing_type.startswith(arr) or new_type.startswith(arr):
+            raise Exception('Cannot generalize %s and %s' % (existing_type, new_type))
+        elif existing_type.startswith(ma) or new_type.startswith(ma):
             raise Exception('Cannot generalize %s and %s' % (existing_type, new_type))
         elif existing_type.startswith(nu) or new_type.startswith(nu):
             if existing_type.startswith(nu):
@@ -125,11 +137,20 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
     def is_compatible_type(self, existing_type, new_type):
         arr = 'Array('
         nu = 'Nullable('
+        ma = 'Map('
         if existing_type == new_type:
             return True
         elif existing_type.startswith(arr) and new_type.startswith(arr):
             return self.is_compatible_type(existing_type[len(arr):-1], new_type[len(arr):-1])
+        elif existing_type.startswith(ma) and new_type.startswith(ma):
+            existing_spec = existing_type[len(ma),-1].split(',')
+            new_spec = new_type[len(ma), -1].split(',')
+            return self.is_compatible_type(existing_spec[0].strip(), new_spec[0].strip()) \
+                   and self.is_compatible_type(existing_spec[1].strip(),
+                                              new_spec[1].strip())
         elif existing_type.startswith(arr) or new_type.startswith(arr):
+            return False
+        elif existing_type.startswith(ma) or new_type.startswith(ma):
             return False
         elif existing_type.startswith(nu) or new_type.startswith(nu):
             if existing_type.startswith(nu):
@@ -192,7 +213,12 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
         elif isinstance(pythonobj, dt.date):
             result = 'Date'
         elif isinstance(pythonobj, dict):
-            result = 'String' # Actually JSON
+            if self.enable_map_datatype:
+                return 'Map(%s, %s)' % (self.clickhousetypefrompython(list(pythonobj.keys())[0],'', nullablelambda),
+                                       self.clickhousetypefrompython(list(pythonobj.values())[0], '', nullablelambda),
+                                       )
+            else:
+                result = 'String' # Actually JSON
         elif hasattr(pythonobj, '__iter__') and not isinstance(pythonobj, str):
             possibletypes = set()
             for x in pythonobj:
@@ -313,6 +339,14 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
                 if value is None:
                     return '[]'
                 return '[%s]' % ','.join([self.formatfield(x, type[6:-1], name, True) for x in value])
+            if type.startswith('Map(') and type.endswith(')'):
+                spec=type[4:-1].split(',')
+                if len(spec) != 2:
+                    raise Exception('Cannot format type %s, it is either malformed or too nested for this simple '
+                                    'driver' % (type))
+                return '{%s}' % ','.join(['%s:%s' % (
+                    self.formatfield(k, spec[0].strip(), name+str(k), True),
+                    self.formatfield(v, spec[1].strip(), name+str(v), True)) for k, v in value.items()])
         except Exception as e:
             if sys.version_info[0] == 3:
                 raise Exception('Cannot format field %s' % name) from e
@@ -388,6 +422,25 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
                 raise Exception('Cannot deserialize %s' % value)
 
             return [self.unformatfield(x, type[6:-1]) for x in [y[1:-1] if len(y) >= 2 and y[0]=="'" and y[-1]=="'" else y for y in parts]]
+
+        if type.startswith('Map(') and type.endswith(')'):
+            spec=type[4:-1].split(',')
+            if len(spec) != 2:
+                raise Exception('Cannot format type %s, it is either malformed or too nested for this simple '
+                                'driver' % (type))
+            x = ast.literal_eval(value)
+            spec[0] = spec[0].strip()
+            spec[1] = spec[1].strip()
+            result = dict()
+            for k, v in x.items():
+                if spec[0] == 'Date' or spec[0] == 'DateTime':
+                    k = self.unformatfield(k, spec[0])
+                if spec[1] == 'Date' or spec[1] == 'DateTime':
+                    v = self.unformatfield(v, spec[1])
+                elif spec[1].startswith('Array(') and spec[1].endswith(')'):
+                    v = self.unformatfield(v, spec[1][6:-1])
+                result[k] = v
+            return result
         raise Exception('Unexpected error, field cannot be unformatted, %s, %s' % (str(value), type))
 
     def unformat_as_dataframe(self, payload_b):
@@ -443,7 +496,7 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
             if type.startswith('Nullable(') and type.endswith(')'):
                 type = type[len('Nullable('):-1]
 
-            if 'Array' in type:
+            if 'Array' in type or 'Map' in type:
                 dtypes[field] = np.object
             elif type in ['UInt8', 'UInt16', 'UInt32', 'UInt64', 'Int8', 'Int16', 'Int32', 'Int64']:
                 dtypes[field] = np.float # np.int does not support NANs

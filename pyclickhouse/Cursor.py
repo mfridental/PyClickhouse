@@ -46,6 +46,7 @@ class Cursor(object):
         self.rowindex = -1
         self.cache = FilterableCache()
 
+
     @staticmethod
     def _escapeparameter(param):
         if isinstance(param, bool):
