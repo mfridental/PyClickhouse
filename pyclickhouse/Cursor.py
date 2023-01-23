@@ -449,8 +449,10 @@ class Cursor(object):
         return fields, types
 
     def _flatten_documents(self, documents):
-        flattened = []
         commentmap = {}
+        if self.formatter.enable_map_datatype:
+            return commentmap, documents
+        flattened = []
         for doc in documents:
             f, m = Cursor._flatten_dict(doc)
             commentmap.update(m)
