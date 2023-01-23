@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-
+import datetime
 import unittest
 import datetime as dt
 
@@ -86,8 +86,8 @@ class TestSimple(unittest.TestCase):
                 'f09': 109.9,
                 'f10': 110.10,
                 'f11': 'a string',
-                'f12': '1975-11-10',
-                'f13': '1975-11-10 02:23:01',
+                'f12': datetime.datetime(1975,11,10).date(),
+                'f13': datetime.datetime(1975,11,10,2,23,1),
                 'f14': [101],
                 'f15': [102],
                 'f16': [103],
@@ -107,7 +107,35 @@ class TestSimple(unittest.TestCase):
         #values = values * 10000
 
         start = dt.datetime.now()
-        cur.bulkinsert('simpletest', values)
+        cur.bulkinsert('simpletest', values, fields=values[0].keys(), types=[
+            'UInt8',
+            'UInt16',
+            'UInt32',
+            'UInt64',
+            'Int8',
+            'Int16',
+            'Int32',
+            'Int64',
+            'Float32',
+            'Float64',
+            'String',
+            'Date',
+            'DateTime',
+            'Array(UInt8)',
+            'Array(UInt16)',
+            'Array(UInt32)',
+            'Array(UInt64)',
+            'Array(Int8)',
+            'Array(Int16)',
+            'Array(Int32)',
+            'Array(Int64)',
+            'Array(Float32)',
+            'Array(Float64)',
+            'Array(String)',
+            'Array(Date)',
+            'Array(DateTime)',
+            "DateTime('UTC')"
+        ])
         print(10000.0 / (dt.datetime.now() - start).total_seconds())
 
         cur.select("""

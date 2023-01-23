@@ -103,7 +103,34 @@ values = [
 values = values * 10000
 
 start = dt.datetime.now()
-cur.bulkinsert('simpletest', values)
+cur.bulkinsert('simpletest', values, fields=values[0].keys(), types=[
+            'UInt8',
+            'UInt16',
+            'UInt32',
+            'UInt64',
+            'Int8',
+            'Int16',
+            'Int32',
+            'Int64',
+            'Float32',
+            'Float64',
+            'String',
+            'Date',
+            'DateTime',
+            'Array(UInt8)',
+            'Array(UInt16)',
+            'Array(UInt32)',
+            'Array(UInt64)',
+            'Array(Int8)',
+            'Array(Int16)',
+            'Array(Int32)',
+            'Array(Int64)',
+            'Array(Float32)',
+            'Array(Float64)',
+            'Array(String)',
+            'Array(Date)',
+            'Array(DateTime)'
+])
 print(10000.0 / (dt.datetime.now() - start).total_seconds())
 
 cur.select("""
