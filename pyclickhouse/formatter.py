@@ -340,6 +340,8 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
                     return '[]'
                 return '[%s]' % ','.join([self.formatfield(x, type[6:-1], name, True) for x in value])
             if type.startswith('Map(') and type.endswith(')'):
+                if value is None:
+                    return '{}'
                 spec=type[4:-1].split(',')
                 if len(spec) != 2:
                     raise Exception('Cannot format type %s, it is either malformed or too nested for this simple '
@@ -426,7 +428,7 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
         if type.startswith('Map(') and type.endswith(')'):
             spec=type[4:-1].split(',')
             if len(spec) != 2:
-                raise Exception('Cannot format type %s, it is either malformed or too nested for this simple '
+                raise Exception('Cannot unformat type %s, it is either malformed or too nested for this simple '
                                 'driver' % (type))
             x = ast.literal_eval(value)
             spec[0] = spec[0].strip()
