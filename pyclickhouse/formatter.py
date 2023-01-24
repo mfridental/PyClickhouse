@@ -94,8 +94,8 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
         elif existing_type.startswith(arr) and new_type.startswith(arr):
             return 'Array(%s)' % self.generalize_type(existing_type[len(arr):-1], new_type[len(arr):-1])
         elif existing_type.startswith(ma) and new_type.startswith(ma):
-            existing_spec = existing_type[len(ma),-1].split(',')
-            new_spec = new_type[len(ma), -1].split(',')
+            existing_spec = existing_type[len(ma):-1].split(',')
+            new_spec = new_type[len(ma): -1].split(',')
             return 'Map(%s,%s)' % (self.generalize_type(existing_spec[0].strip(), new_spec[0].strip()), self.generalize_type(
                 existing_spec[1].strip(), new_spec[1].strip()))
         elif existing_type.startswith(arr) or new_type.startswith(arr):
@@ -143,8 +143,8 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
         elif existing_type.startswith(arr) and new_type.startswith(arr):
             return self.is_compatible_type(existing_type[len(arr):-1], new_type[len(arr):-1])
         elif existing_type.startswith(ma) and new_type.startswith(ma):
-            existing_spec = existing_type[len(ma),-1].split(',')
-            new_spec = new_type[len(ma), -1].split(',')
+            existing_spec = existing_type[len(ma):-1].split(',')
+            new_spec = new_type[len(ma): -1].split(',')
             return self.is_compatible_type(existing_spec[0].strip(), new_spec[0].strip()) \
                    and self.is_compatible_type(existing_spec[1].strip(),
                                               new_spec[1].strip())
