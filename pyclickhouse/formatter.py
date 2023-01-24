@@ -388,7 +388,7 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
                 return None
             tmp = dt.datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
             if type.startswith('DateTime('):
-                tmp = tmp.astimezone(pytz.timezone(type.split('(')[1][2:-3]))
+                tmp = tmp.replace(tzinfo=pytz.timezone(type.split('(')[1][2:-3]))
             return tmp
         if 'Array' in type:
             if value == '[]':
@@ -468,7 +468,7 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
                         value = value[:-1]
                     if value == '0000-00-00 00:00:00' or value == '1970-01-01 86:28:16':
                         return None
-                    return dt.datetime.strptime(value, '%Y-%m-%d %H:%M:%S').astimezone(tz)
+                    return dt.datetime.strptime(value, '%Y-%m-%d %H:%M:%S').replace(tzinfo=tz)
             else:
                 def to_datetime(value):
                     if value.startswith("'"):
