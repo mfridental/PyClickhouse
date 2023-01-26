@@ -232,3 +232,20 @@ class TestNewUnitTests(unittest.TestCase):
         assert 'noextra' not in fields
 
         self.cursor.ddl('drop table if exists TestNoExtend ')
+
+    def test_nested_arrays(self):
+        self.cursor.ddl('drop table if exists NestedA ')
+        self.cursor.ddl('create table NestedA (a Array(Int64), b Array(String), c Array(DateTime)) Engine=Log')
+        self.cursor.insert("insert into NestedA values ([1,2,3], ['a', 'b','c'], ['2023-01-01 00:00:00'])")
+        docs = [{'a': [10,20,30],
+                 'b': ['strinh'],
+                 'c': [dt.datetime.now(), dt.datetime.now()+dt.timedelta(seconds=3)]}]
+        self.cursor.bulkinsert('NestedA', docs)
+        self.cursor.select("""
+        select groupArray(a) aa, groupArray(b) bb, groupArray(c) cc
+        from NestedA
+        """)
+        r = self.cursor.fetchone()
+        assert r['aa'] == [[1, 2, 3], [10, 20, 30]]
+        assert r['bb'] == [['a', 'b', 'c'], ['strinh']]
+        assert r['cc'][0] == [dt.datetime(2023, 1, 1, 0, 0)]

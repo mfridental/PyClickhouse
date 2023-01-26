@@ -392,38 +392,20 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
             if type.startswith('DateTime('):
                 tmp = tmp.replace(tzinfo=pytz.timezone(type.split('(')[1][2:-3]))
             return tmp
-        if 'Array' in type:
-            if value == '[]':
-                return []
+        if type.startswith('Array('):
+            value = value.replace(',,', ",'',") # workaround empty string clickhouse bug
+            parts = ast.literal_eval(value)
 
-            # Handle arrays with strings containing commas, like ['abc','d,ef']
-            parts = []
-            acc = None
-            for part in value[1:-1].split(','):
-                stripped = part.rstrip().lstrip()
-
-                if len(stripped) == 0:
-                    parts.append(part)
-                    continue
-
-                if stripped[0] == "'" and stripped[-1] != "'":
-                    acc = part
-                    continue
-
-                if acc is not None:
-                    if stripped[-1] == "'":
-                        parts.append(acc + ',' + part)
-                        acc = None
+            def handle_dates(val, typ):
+                if typ == 'Date' or typ == 'DateTime':
+                    return [self.unformatfield(x, typ) for x in val]
+                else:
+                    if typ.startswith('Array('):
+                        return [handle_dates(x, typ[6:-1].strip()) for x in val]
                     else:
-                        acc += ',' + part
-                    continue
+                        return val
 
-                parts.append(part)
-
-            if acc is not None:
-                raise Exception('Cannot deserialize %s' % value)
-
-            return [self.unformatfield(x, type[6:-1]) for x in [y[1:-1] if len(y) >= 2 and y[0]=="'" and y[-1]=="'" else y for y in parts]]
+            return handle_dates(parts, type[6:-1].strip())
 
         if type.startswith('Map(') and type.endswith(')'):
             spec=type[4:-1].split(',')
