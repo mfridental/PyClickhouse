@@ -249,3 +249,6 @@ class TestNewUnitTests(unittest.TestCase):
         assert r['aa'] == [[1, 2, 3], [10, 20, 30]]
         assert r['bb'] == [['a', 'b', 'c'], ['strinh']]
         assert r['cc'][0] == [dt.datetime(2023, 1, 1, 0, 0)]
+        self.cursor.select('select c from NestedA limit 1')
+        r = self.cursor.fetchone()
+        print(r)
