@@ -124,9 +124,9 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
             existing_bits = int(existing_type[5:])
             new_bits = int(new_type[5:])
             return 'Float%d' % (max(existing_bits, new_bits))
-        elif existing_type == 'Date' and new_type == 'DateTime':
+        elif existing_type == 'Date' and new_type.startswith('DateTime'):
             return new_type
-        elif existing_type == 'DateTime' and new_type == 'Date':
+        elif existing_type.startswith('DateTime') and new_type == 'Date':
             return existing_type
         elif existing_type.startswith('DateTime(') and new_type == 'DateTime':
             return existing_type
@@ -174,9 +174,9 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
             existing_bits = int(existing_type[5:])
             new_bits = int(new_type[5:])
             return new_bits <= existing_bits
-        elif existing_type == 'Date' and new_type == 'DateTime':
+        elif existing_type == 'Date' and new_type.startswith('DateTime'):
             return False
-        elif existing_type == 'DateTime' and new_type == 'Date':
+        elif existing_type.startswith('DateTime') and new_type == 'Date':
             return False
         elif existing_type.startswith('DateTime(') and new_type == 'DateTime':
             return True
@@ -397,7 +397,7 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
             parts = ast.literal_eval(value)
 
             def handle_dates(val, typ):
-                if typ == 'Date' or typ == 'DateTime':
+                if typ.startswith('Date'):
                     return [self.unformatfield(x, typ) for x in val]
                 else:
                     if typ.startswith('Array('):
@@ -417,9 +417,9 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
             spec[1] = spec[1].strip()
             result = dict()
             for k, v in x.items():
-                if spec[0] == 'Date' or spec[0] == 'DateTime':
+                if spec[0].startswith('Date'):
                     k = self.unformatfield(k, spec[0])
-                if spec[1] == 'Date' or spec[1] == 'DateTime':
+                if spec[1].startswith('Date'):
                     v = self.unformatfield(v, spec[1])
                 elif spec[1].startswith('Array(') and spec[1].endswith(')'):
                     v = self.unformatfield(v, spec[1][6:-1])
