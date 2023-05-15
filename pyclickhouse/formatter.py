@@ -481,13 +481,13 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
                 type = type[len('Nullable('):-1]
 
             if 'Array' in type or 'Map' in type:
-                dtypes[field] = np.object
+                dtypes[field] = object
             elif type in ['UInt8', 'UInt16', 'UInt32', 'UInt64', 'Int8', 'Int16', 'Int32', 'Int64']:
-                dtypes[field] = np.float # np.int does not support NANs
+                dtypes[field] = float # np.int does not support NANs
             elif type in ['String', 'IPv6']:
                 dtypes[field] = str
             elif type in ['Float32', 'Float64']:
-                dtypes[field] = np.float
+                dtypes[field] = float
             elif type == 'Date':
                 converters[field] = to_date
             elif type == 'DateTime' or type.startswith('DateTime('):
