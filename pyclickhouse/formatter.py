@@ -1,6 +1,6 @@
 import logging
 import numpy as np
-import pytz
+from dateutil import tz
 import ast
 
 import ujson
@@ -390,7 +390,7 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
                 return None
             tmp = dt.datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
             if type.startswith('DateTime('):
-                tmp = tmp.replace(tzinfo=pytz.timezone(type.split('(')[1][2:-3]))
+                tmp = tmp.replace(tzinfo=tz.gettz(type.split('(')[1][2:-3]))
             return tmp
         if type.startswith('Array('):
             value = value.replace(',,', ",'',") # workaround empty string clickhouse bug
@@ -444,7 +444,7 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
 
         def make_to_datetime(type):
             if type.startswith('('):
-                tz = pytz.timezone(type.split('(')[1][2:-3])
+                tzinfo = tz.gettz(type.split('(')[1][2:-3])
                 def to_datetime(value):
                     if value.startswith("'"):
                         value = value[1:]
@@ -452,7 +452,7 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
                         value = value[:-1]
                     if value == '0000-00-00 00:00:00' or value == '1970-01-01 86:28:16':
                         return None
-                    return dt.datetime.strptime(value, '%Y-%m-%d %H:%M:%S').replace(tzinfo=tz)
+                    return dt.datetime.strptime(value, '%Y-%m-%d %H:%M:%S').replace(tzinfo=tzinfo)
             else:
                 def to_datetime(value):
                     if value.startswith("'"):
@@ -485,7 +485,7 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
             elif type in ['UInt8', 'UInt16', 'UInt32', 'UInt64', 'Int8', 'Int16', 'Int32', 'Int64']:
                 dtypes[field] = np.float # np.int does not support NANs
             elif type in ['String', 'IPv6']:
-                dtypes[field] = np.str
+                dtypes[field] = str
             elif type in ['Float32', 'Float64']:
                 dtypes[field] = np.float
             elif type == 'Date':
