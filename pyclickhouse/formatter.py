@@ -335,6 +335,17 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
                     return "'%s'" % escaped
                 else:
                     return escaped
+            if type == 'DateTime64' or type.startswith('DateTime64('):
+                if value is None or value.replace(tzinfo=None) <= dt.datetime(1970,1,2,0,0,0):
+                    escaped = '0000-00-00 00:00:00,000'
+                else:
+                    escaped = '%04d-%02d-%02d %02d:%02d:%02d.%03d' % (value.year, value.month, value.day, value.hour,
+                                                                  value.minute, value.second,
+                                                                      int(value.microsecond/1000))
+                if inarray:
+                    return "'%s'" % escaped
+                else:
+                    return escaped
             if 'Array' in type:
                 if value is None:
                     return '[]'
@@ -390,6 +401,17 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
                 return None
             tmp = dt.datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
             if type.startswith('DateTime('):
+                tmp = tmp.replace(tzinfo=tz.gettz(type.split('(')[1][2:-3]))
+            return tmp
+        if type == 'DateTime64' or type.startswith('DateTime64('):
+            if value.startswith("'"):
+                value = value[1:]
+            if value.endswith("'"):
+                value = value[:-1]
+            if value.startswith('0000-00-00 00:00:00') or value.startswith('1970-01-01 86:28:16'):
+                return None
+            tmp = dt.datetime.strptime(value, '%Y-%m-%d %H:%M:%S.%f')
+            if type.startswith('DateTime64('):
                 tmp = tmp.replace(tzinfo=tz.gettz(type.split('(')[1][2:-3]))
             return tmp
         if type.startswith('Array('):

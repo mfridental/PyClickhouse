@@ -18,6 +18,12 @@ class TestNewUnitTests(unittest.TestCase):
         assert result[0] == 'abc'
         assert result[1] == 'def'
 
+    def test_u64_serializaton(self):
+        self.cursor.ddl('create table t64 (ts DateTime64(3)) Engine=MergeTree order by ts')
+        self.cursor.bulkinsert('t64', [{'ts': dt.datetime.now()}], ['ts'], ['DateTime64(3)'])
+        self.cursor.select("""select ts from t64""")
+        assert 'ts' in self.cursor.fetchone()
+
     def test_unformat_of_commas(self):
         formatter = TabSeparatedWithNamesAndTypesFormatter()
         formatter.unformatfield("['abc',,'def']", 'Array(String)')  # boom
