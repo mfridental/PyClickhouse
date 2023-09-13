@@ -18,6 +18,29 @@ class TestNewUnitTests(unittest.TestCase):
         assert result[0] == 'abc'
         assert result[1] == 'def'
 
+    def test_nullables(self):
+        self.cursor.ddl('drop table if exists NullTest')
+
+        self.cursor.ddl("""
+        create table NullTest (
+            key Int64,
+            f1 Nullable(String),
+            f2 Nullable(Int64),
+            f3 Array(Nullable(String)),
+            f4 Array(Nullable(Int64))
+        ) Engine = MergeTree order by key
+        """)
+
+        data = [{'key': 1, 'f1': None, 'f2': None, 'f3': ['pre', None, 'post'], 'f4': [None, 3]}]
+        self.cursor.bulkinsert('NullTest', data, ['key','f1','f2','f3','f4'],['Int64', 'Nullable(String)',
+                                                                              'Nullable(Int64)','Array(Nullable('
+                                                                                                'String))',
+                                                                              'Array(Nullable(Int64))'])
+        self.cursor.select('select * from NullTest')
+        r = self.cursor.fetchall()
+        print(r)
+        assert data == r
+
     def test_u64_serializaton(self):
         self.cursor.ddl('create table t64 (ts DateTime64(3)) Engine=MergeTree order by ts')
         self.cursor.bulkinsert('t64', [{'ts': dt.datetime.now()}], ['ts'], ['DateTime64(3)'])

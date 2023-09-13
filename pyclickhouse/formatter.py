@@ -1,3 +1,5 @@
+import re
+
 import logging
 import numpy as np
 from dateutil import tz
@@ -281,7 +283,10 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
             if type.startswith('Nullable(') and type.endswith(')'):
                 type = type[len('Nullable('):-1]
                 if value is None:
-                    return 'NULL'
+                    if inarray:
+                        return 'NULL'
+                    else:
+                        return '\\N'
 
             if type in ['UInt8','UInt16', 'UInt32', 'UInt64','Int8','Int16','Int32','Int64']:
                 if value is None:
@@ -416,7 +421,7 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
             return tmp
         if type.startswith('Array('):
             value = value.replace(',,', ",'',") # workaround empty string clickhouse bug
-            parts = ast.literal_eval(value)
+            parts = eval(value, None, {'NULL': None})
 
             def handle_dates(val, typ):
                 if typ.startswith('Date'):
