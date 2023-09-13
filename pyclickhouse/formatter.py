@@ -281,7 +281,7 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
             if type.startswith('Nullable(') and type.endswith(')'):
                 type = type[len('Nullable('):-1]
                 if value is None:
-                    return '\\N'
+                    return 'NULL'
 
             if type in ['UInt8','UInt16', 'UInt32', 'UInt64','Int8','Int16','Int32','Int64']:
                 if value is None:
@@ -375,7 +375,7 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
 
         if type.startswith('Nullable(') and type.endswith(')'):
             type = type[len('Nullable('):-1]
-            if value == '\\N':
+            if value == 'NULL' or value == '\\N':
                 return None
 
         if type in ['UInt8','UInt16', 'UInt32', 'UInt64','Int8','Int16','Int32','Int64']:
@@ -521,7 +521,7 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
         df = pd.read_csv(
             io.StringIO(payload),
             sep='\t',
-            na_values='\\N',
+            na_values='NULL',
             dtype = dtypes,
             converters= converters,
             header=0,
