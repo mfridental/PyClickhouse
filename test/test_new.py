@@ -283,3 +283,8 @@ class TestNewUnitTests(unittest.TestCase):
         self.cursor.select('select c from NestedA limit 1')
         r = self.cursor.fetchone()
         print(r)
+
+    def test_datetime_nanoseconds(self):
+        formatter = TabSeparatedWithNamesAndTypesFormatter()
+        r = formatter.unformatfield('2023-01-01 01:02:03.123456789', 'DateTime64(9)')
+        assert r == dt.datetime(2023,1,1,1,2,3,123456)

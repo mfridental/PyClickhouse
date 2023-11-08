@@ -415,6 +415,10 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
                 value = value[:-1]
             if value.startswith('0000-00-00 00:00:00') or value.startswith('1970-01-01 86:28:16'):
                 return None
+            ttt = value.split('.')
+            if len(ttt[-1]) > 6: # python doesn't support nanoseconds yet
+                ttt[-1] = ttt[-1][:6]
+                value = '.'.join(ttt)
             tmp = dt.datetime.strptime(value, '%Y-%m-%d %H:%M:%S.%f')
             if type.startswith('DateTime64('):
                 tmp = tmp.replace(tzinfo=tz.gettz(type.split('(')[1][2:-3]))
