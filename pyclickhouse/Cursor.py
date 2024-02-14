@@ -351,10 +351,11 @@ class Cursor(object):
         fields, flattened, types = self.prepare_document_table(table, documents, nullablelambda, usebuffertable,
                                                                extendtable)
 
-        if usebuffertable is not None:
-            self.ddl("""
-            CREATE TABLE IF NOT EXISTS %s_Buffer AS %s 
-            ENGINE = %s""" % (table, table, usebuffertable))
+        # creating buffers on the fly can crash clickhouse
+        # if usebuffertable is not None:
+        #     self.ddl("""
+        #     CREATE TABLE IF NOT EXISTS %s_Buffer AS %s
+        #     ENGINE = %s""" % (table, table, usebuffertable))
 
         tries = 0
         while tries < 5:
