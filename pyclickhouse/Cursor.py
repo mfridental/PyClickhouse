@@ -294,18 +294,18 @@ class Cursor(object):
             try:
                 table_fields, table_types = self.get_schema(table)
                 table_schema = dict(zip(table_fields, table_types))
-                if usebuffertable is not None:
-                    buffer_fields, buffer_types = self.get_schema(table + '_Buffer')
-                    buffer_schema = dict(zip(buffer_fields, buffer_types))
+                # if usebuffertable is not None:
+                #     buffer_fields, buffer_types = self.get_schema(table + '_Buffer')
+                #     buffer_schema = dict(zip(buffer_fields, buffer_types))
                 ddled = False
                 new_types = []
                 for doc_field, doc_type in zip(fields, types):
-                    if usebuffertable is not None and \
-                            (doc_field not in buffer_schema or buffer_schema[doc_field] != doc_type) and \
-                            not dropped:
-                        self.ddl('drop table if exists %s_Buffer' % table)
-                        dropped = True
-                        # it will be re-created in the store_documents
+                    # if usebuffertable is not None and \
+                    #         (doc_field not in buffer_schema or buffer_schema[doc_field] != doc_type) and \
+                    #         not dropped:
+                    #     self.ddl('drop table if exists %s_Buffer' % table)
+                    #     dropped = True
+                    #     # it will be re-created in the store_documents
 
                     if doc_field not in table_schema:
                         logging.info('Extending %s with %s %s' % (table, doc_field, doc_type))
