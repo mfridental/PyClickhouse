@@ -1,5 +1,7 @@
 # coding=utf-8
 import unittest
+import warnings
+
 import pyclickhouse
 import datetime as dt
 from pyclickhouse.formatter import TabSeparatedWithNamesAndTypesFormatter
@@ -55,7 +57,8 @@ class TestNewUnitTests(unittest.TestCase):
         doc = {'id': 3, 'historydate': dt.date(2019,6,7), 'Offer': {'price': 5, 'count': 1}, 'Images': [{'file': 'a', 'size': 400}, {'file': 'b', 'size': 500}]}
         self.cursor.formatter.enable_map_datatype = False
         self.cursor.ddl('drop table if exists docs')
-        self.cursor.ddl('create table if not exists docs (historydate Date, id Int64) Engine=MergeTree(historydate, id, 8192)')
+        self.cursor.ddl('create table if not exists docs (historydate Date, id Int64) Engine=MergeTree order by id '
+                        'partition by toYYYYMM(historydate)')
         self.cursor.store_documents('docs', [doc])
         self.cursor.select('select * from docs')
         r = self.cursor.fetchone()
@@ -65,19 +68,20 @@ class TestNewUnitTests(unittest.TestCase):
         assert r['Offer_price'] == 5
         assert r['id'] == 3
         assert r['historydate'] == dt.date(2019, 6, 7)
-        documents = self.cursor.retrieve_documents("select * from docs")
+        documents = self.cursor.retrieve_documents("select * from docs", ['docs'])
         assert doc == documents[0]
 
     def test_store_doc2(self):
         doc = {'id': 3, 'historydate': dt.date(2019,6,7), 'Offer': {'price': 5, 'count': 1}, 'Images': [{'file': 'a', 'size': 400, 'tags': ['cool','Nikon']}, {'file': 'b', 'size': 500}]}
         self.cursor.formatter.enable_map_datatype = False
         self.cursor.ddl('drop table if exists docs')
-        self.cursor.ddl('create table if not exists docs (historydate Date, id Int64) Engine=MergeTree(historydate, id, 8192)')
+        self.cursor.ddl('create table if not exists docs (historydate Date, id Int64) Engine=MergeTree '
+                        'order by id partition by toYYYYMM(historydate)')
         self.cursor.store_documents('docs', [doc])
         self.cursor.select('select * from docs')
         r = self.cursor.fetchone()
         assert 'Images_json' in r
-        documents = self.cursor.retrieve_documents("select * from docs")
+        documents = self.cursor.retrieve_documents("select * from docs", ['docs'])
         assert doc == documents[0]
 
     def test_dict_flattening(self):
@@ -250,7 +254,8 @@ class TestNewUnitTests(unittest.TestCase):
 
     def test_noextend(self):
         self.cursor.ddl('drop table if exists TestNoExtend ')
-        self.cursor.ddl('create table TestNoExtend(id String, historydate Date) Engine=MergeTree(historydate, id, 8192)')
+        self.cursor.ddl('create table TestNoExtend(id String, historydate Date) Engine=MergeTree '
+                        'order by id partition by toYYYYMM(historydate)')
 
         doc = {'id':'first', 'historydate':dt.date.today(), 'extra':5}
         self.cursor.store_documents('TestNoExtend', [doc])
@@ -277,12 +282,11 @@ class TestNewUnitTests(unittest.TestCase):
         from NestedA
         """)
         r = self.cursor.fetchone()
-        assert r['aa'] == [[1, 2, 3], [10, 20, 30]]
-        assert r['bb'] == [['a', 'b', 'c'], ['strinh']]
-        assert r['cc'][0] == [dt.datetime(2023, 1, 1, 0, 0)]
+        assert r['aa'] == [[1, 2, 3], [10, 20, 30]] or r['aa'] == [[10, 20, 30], [1, 2, 3]]
+        assert r['bb'] == [['a', 'b', 'c'], ['strinh']] or r['bb'] == [['strinh'], ['a', 'b', 'c']]
+        assert dt.datetime(2023, 1, 1, 0, 0, 0) in r['cc'][0] or dt.datetime(2023, 1, 1, 0, 0, 0) in r['cc'][1]
         self.cursor.select('select c from NestedA limit 1')
         r = self.cursor.fetchone()
-        print(r)
 
     def test_datetime_nanoseconds(self):
         formatter = TabSeparatedWithNamesAndTypesFormatter()

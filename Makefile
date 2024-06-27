@@ -3,8 +3,8 @@ test: run
 	python -m unittest discover ; docker stop clickhouse-test-server
 
 run:
-	# start local temporary clickhouse server: https://github.com/yandex/ClickHouse/tree/master/docker/server
-	docker run -d -p 8124:8123 -p 9001:9000 --rm --name clickhouse-test-server --ulimit nofile=262144:262144 yandex/clickhouse-server
+	# start local temporary clickhouse server
+	docker run -d -p 8124:8123 -p 9001:9000 --rm --name clickhouse-test-server --ulimit nofile=262144:262144 clickhouse/clickhouse-server
 	sh -c 'sleep 5s'
 
 stop:

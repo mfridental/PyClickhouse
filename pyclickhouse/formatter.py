@@ -22,6 +22,28 @@ class NestingLevelTooHigh(Exception):
     pass
 
 
+def parse_variant_types(s):
+    result = []
+    buffer = []
+    paren_count = 0
+
+    for char in s:
+        if char == ',' and paren_count == 0:
+            result.append(''.join(buffer).strip())
+            buffer = []
+        else:
+            if char == '(':
+                paren_count += 1
+            elif char == ')':
+                paren_count -= 1
+            buffer.append(char)
+
+    # Add the last buffered part
+    if buffer:
+        result.append(''.join(buffer).strip())
+
+    return result
+
 
 class DictionaryAdapter(object):
     def getfields(self, dict):
@@ -86,6 +108,7 @@ class ObjectAdapter(object):
 class TabSeparatedWithNamesAndTypesFormatter(object):
     def __init__(self):
         self.enable_map_datatype = False
+        self.use_variant_for_generalization = False
 
     def generalize_type(self, existing_type, new_type):
         arr = 'Array('
@@ -100,10 +123,6 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
             new_spec = new_type[len(ma): -1].split(',')
             return 'Map(%s,%s)' % (self.generalize_type(existing_spec[0].strip(), new_spec[0].strip()), self.generalize_type(
                 existing_spec[1].strip(), new_spec[1].strip()))
-        elif existing_type.startswith(arr) or new_type.startswith(arr):
-            raise Exception('Cannot generalize %s and %s' % (existing_type, new_type))
-        elif existing_type.startswith(ma) or new_type.startswith(ma):
-            raise Exception('Cannot generalize %s and %s' % (existing_type, new_type))
         elif existing_type.startswith(nu) or new_type.startswith(nu):
             if existing_type.startswith(nu):
                 existing_type = existing_type[len(nu):-1]
@@ -134,9 +153,31 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
             return existing_type
         elif existing_type == 'DateTime' and new_type.startswith('DateTime('):
             return new_type
-        return 'String'
+
+        if not self.use_variant_for_generalization:
+            if existing_type.startswith(arr) or new_type.startswith(arr) or existing_type.startswith(ma) or new_type.startswith(ma):
+                raise Exception('Cannot generalize %s and %s' % (existing_type, new_type))
+
+            return "String"
+
+        if existing_type.startswith('Variant(') and new_type.startswith('Variant('):
+            spec = set(parse_variant_types(existing_type[8:-1]))
+            spec = spec.union(parse_variant_types(new_type[8:-1]))
+        elif new_type.startswith('Variant('):
+            spec = set(parse_variant_types(new_type[8:-1]))
+            spec.add(existing_type)
+        elif existing_type.startswith('Variant('):
+            spec = set(parse_variant_types(existing_type[8:-1]))
+            spec.add(new_type)
+        else:
+            spec = (existing_type, new_type)
+        return 'Variant(%s)' % ", ".join(sorted(spec))
+
 
     def is_compatible_type(self, existing_type, new_type):
+        if self.use_variant_for_generalization:
+            return True
+
         arr = 'Array('
         nu = 'Nullable('
         ma = 'Map('
@@ -237,7 +278,8 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
                     type = self.generalize_type(type, other)
                 result = 'Array(' + type  + ')'
         if result is None:
-            raise Exception('Cannot infer type of "%s", type not supported for: %s, %s' % (name, repr(pythonobj), type(pythonobj)))
+            raise Exception('Cannot infer type of "%s", type not supported for: %s, %s' % (name, repr(pythonobj),
+                                                                                           pythonobj.__class__))
         if nullablelambda(name) and not result.startswith('Array'):
             result = 'Nullable(%s)' % result
         return result
@@ -260,6 +302,12 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
 
         if fields is None and types is None:
             fields, types = self.get_schema(rows[0])
+            if self.use_variant_for_generalization:
+                for row in list(rows)[1:]:
+                    f, t = self.get_schema(row)
+                    for i in range(len(types)):
+                        if types[i] != t[i]:
+                            types[i] = self.generalize_type(types[i], t[i])
 
         if sys.version_info[0] == 2:
             fields = [x.encode('utf8') for x in fields]
@@ -277,6 +325,13 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
 
     def formatfield(self, value, type, name, inarray = False):
         try:
+            if type.startswith('Variant(') and type.endswith(')'):
+                spec = [x.strip() for x in parse_variant_types(type[8:-1])]
+                real_type = self.clickhousetypefrompython(value, name)
+                if real_type not in spec:
+                    raise Exception('%s with type %s is not covered by %s' % (name, real_type, type))
+                return self.formatfield(value, real_type, name, inarray)
+
             if type.startswith('LowCardinality(') and type.endswith(')'):
                 type = type[len('LowCardinality('):-1]
 
@@ -294,7 +349,7 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
                 if isinstance(value, bool):
                     return '1' if value else '0'
                 return str(value)
-            if type in ['String', 'IPv6']:
+            if type in ['String', 'IPv6', 'IPv4']:
                 if value is None:
                     escaped = ''
                 else:
@@ -366,15 +421,16 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
                     self.formatfield(k, spec[0].strip(), name+str(k), True),
                     self.formatfield(v, spec[1].strip(), name+str(v), True)) for k, v in value.items()])
         except Exception as e:
-            if sys.version_info[0] == 3:
-                raise Exception('Cannot format field %s' % name) from e
-            else:
-                raise Exception('Cannot format field %s, %s' % (name, e))
+            raise Exception('Cannot format field %s, %r' % (name, e))
 
         raise Exception('Unexpected error, field %s cannot be formatted, %s, %s' % (name, str(value), type))
 
 
     def unformatfield(self, value, type):
+        """
+        1. Raise exception if value is not of the type
+        2. Otherwise unformat the value
+        """
         if type.startswith('LowCardinality(') and type.endswith(')'):
             type = type[len('LowCardinality('):-1]
 
@@ -384,11 +440,30 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
                 return None
 
         if type in ['UInt8','UInt16', 'UInt32', 'UInt64','Int8','Int16','Int32','Int64']:
-            return int(value)
-        if type in ['String', 'IPv6', 'UUID']:
+            return int(value) # raises if can't unformat
+        if type in ['String', 'IPv4', 'IPv6', 'UUID']:
+            if type == 'IPv4':
+                if re.match(r'^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$', value) is None:
+                    raise Exception('Invalid IPv4 %s' % value)
+            elif type == 'IPv6':
+                if re.match(r'(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,'
+                            r'4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,'
+                            r'2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,'
+                            r'3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,'
+                            r'5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:['
+                            r'0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{'
+                            r'0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,'
+                            r'4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,'
+                            r'1}[0-9]){0,1}[0-9]))', value) is None:
+                    raise Exception('Invalid IPv6 %s' % value)
+            elif type == 'UUID':
+                if re.match(r'[0-9a-fA-F\-]{32}', value) is None:
+                    raise Exception('Invalid UUID %s' % value)
+            elif type == 'String':
+                pass #anything can be string
             return value.replace('\\n','\n').replace('\\t','\t').replace("\\'", "'").replace('\\\\','\\')
         if type in ['Float32', 'Float64']:
-            return float(value)
+            return float(value) # raises if it is not float
         if type == 'Date':
             if value.startswith("'"):
                 value = value[1:]
@@ -396,7 +471,7 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
                 value = value[:-1]
             if value == '0000-00-00' or value == '1970-01-01':
                 return None
-            return dt.datetime.strptime(value, '%Y-%m-%d').date()
+            return dt.datetime.strptime(value, '%Y-%m-%d').date() #raises
         if type == 'DateTime' or type.startswith('DateTime('):
             if value.startswith("'"):
                 value = value[1:]
@@ -406,7 +481,8 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
                 return None
             tmp = dt.datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
             if type.startswith('DateTime('):
-                tmp = tmp.replace(tzinfo=tz.gettz(type.split('(')[1][2:-3]))
+                zone = type.split('(')[1].replace(')','').replace("'", '').replace('\\','').strip()
+                tmp = tmp.replace(tzinfo=tz.gettz(zone))
             return tmp
         if type == 'DateTime64' or type.startswith('DateTime64('):
             if value.startswith("'"):
@@ -419,27 +495,31 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
             if len(ttt[-1]) > 6: # python doesn't support nanoseconds yet
                 ttt[-1] = ttt[-1][:6]
                 value = '.'.join(ttt)
-            tmp = dt.datetime.strptime(value, '%Y-%m-%d %H:%M:%S.%f')
+            tmp = dt.datetime.strptime(value, '%Y-%m-%d %H:%M:%S.%f') #raises
             if type.startswith('DateTime64('):
                 tmp = tmp.replace(tzinfo=tz.gettz(type.split('(')[1][2:-3]))
             return tmp
         if type.startswith('Array('):
+            if not value.startswith('[') or not value.endswith(']'):
+                raise Exception('%s does not look like an array' % value)
             value = value.replace(',,', ",'',") # workaround empty string clickhouse bug
-            parts = eval(value, None, {'NULL': None})
+            parts = eval(value, None, {'NULL': None}) # cannot use literal_eval to support NULL literal from Clickhouse
 
-            def handle_dates(val, typ):
+            def handle_dates(val, typ): # can raise
                 if typ.startswith('Date'):
-                    return [self.unformatfield(x, typ) for x in val]
+                    return [self.unformatfield(x, typ) for x in val] # can raise
                 else:
                     if typ.startswith('Array('):
                         return [handle_dates(x, typ[6:-1].strip()) for x in val]
                     else:
                         return val
 
-            return handle_dates(parts, type[6:-1].strip())
+            return handle_dates(parts, type[6:-1].strip()) # can raise
 
         if type.startswith('Map(') and type.endswith(')'):
-            spec=type[4:-1].split(',')
+            if not value.startswith('{') or not value.endswith('}'):
+                raise Exception('%s does not look like a Map' % value)
+            spec=[x.strip() for x in parse_variant_types(type[4:-1])]
             if len(spec) != 2:
                 raise Exception('Cannot unformat type %s, it is either malformed or too nested for this simple '
                                 'driver' % (type))
@@ -456,6 +536,20 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
                     v = self.unformatfield(v, spec[1][6:-1])
                 result[k] = v
             return result
+
+        if type.startswith('Variant(') and type.endswith(')'):
+            spec=[x.strip() for x in parse_variant_types(type[8:-1])]
+            has_string = 'String' in spec
+            if has_string:
+                spec.remove('String')
+            for s in spec:
+                try:
+                    return self.unformatfield(value, s)
+                except:
+                    pass
+            if has_string:
+                return self.unformatfield(value, 'String')
+
         raise Exception('Unexpected error, field cannot be unformatted, %s, %s' % (str(value), type))
 
     def unformat_as_dataframe(self, payload_b):

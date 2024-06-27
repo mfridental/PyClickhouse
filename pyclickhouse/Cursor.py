@@ -531,7 +531,7 @@ class Cursor(object):
                 unflattened[k] = v
         return unflattened
 
-    def retrieve_documents(self, query, table_names=[]):
+    def retrieve_documents(self, query, table_names):
         self.select(query)
         rows = self.fetchall()
 
@@ -545,7 +545,7 @@ class Cursor(object):
         group by name
         """ % (
             ','.join(["'%s'" % x for x in rows[0].keys()]),
-            ('and table in (%s)' % ','.join(["'%s'" % x for x in table_names])) if len(table_names) > 0 else ''
+            ('and table in (%s)' % ','.join(["'%s'" % x for x in table_names]))
         ))
         mapping = {}
         for map in self.fetchall():

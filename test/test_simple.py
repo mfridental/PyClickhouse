@@ -168,5 +168,5 @@ class TestSimple(unittest.TestCase):
         select f27 from simpletest limit 1
         """)
         val = cur.fetchone()['f27']
-        assert val.tzname() == 'UTC'
+        self.assertEqual(val.tzname(), 'UTC')
 

@@ -14,7 +14,7 @@ drop table if exists simpletest
 cur.select('select count() from system.tables')
 cnt = cur.fetchall()
 
-print(cnt)
+print('yes', cnt)
 
 cur.select('select * from system.tables ')
 print(len(cur.fetchall()))
