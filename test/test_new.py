@@ -118,9 +118,17 @@ class TestNewUnitTests(unittest.TestCase):
         bulk = self.cursor._flatten_dict(doc)
         assert bulk == {'id': 3, 'sub_dict': ['in_array', 'in_array_also'], 'sub_otherkey': [None, True]}
 
+        doc = {'id': 3, 'sub': [{'dict': 'in_array', 'b':[1,2,3]}, {'dict': 'in_array_also', 'otherkey': True}]}
+        bulk = self.cursor._flatten_dict(doc)
+        self.assertEqual(bulk, {'id': 3,
+                        'sub_dict': ['in_array', 'in_array_also'],
+                        'sub_b': [[1,2,3], []],
+                        'sub_otherkey': [None, True]})
+
         doc = {'id': 3, 'sub': {'array': ['in_dict', 'second']}}
         bulk = self.cursor._flatten_dict(doc)
         assert bulk == {'id': 3, 'sub_array': ['in_dict', 'second']}
+
 
         doc = {'id': 3, 'sub': [
             {'dict': 'in_array',

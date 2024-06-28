@@ -240,7 +240,10 @@ class Cursor(object):
                     r = self._flatten_dict(element, [], separator, prefix, path, nesting_level+1)
                     for k, v in r.items():
                         if k not in result:
-                            result[k] = [None] * len(arr)
+                            if hasattr(v, '__iter__') and not isinstance(v, str):
+                                result[k] = [list()] * len(arr)
+                            else:
+                                result[k] = [None] * len(arr)
                         result[k][i] = v
                 elif hasattr(element, '__iter__') and not isinstance(element, str):
                     raise NestingLevelTooHigh()
