@@ -230,89 +230,70 @@ class Cursor(object):
         return ([x['name'] for x in result], [x['type'] for x in result])
 
     @staticmethod
-    def _flatten_array(arr, prefix='', path=[]):
+    def _flatten_array(arr, separator, prefix='', path=[]):
         result = {}
-        mapping = {}
 
         try:
             for i, element in enumerate(arr):
                 if element is None or (hasattr(element, '__len__') and len(element) == 0):
                     continue
                 if hasattr(element, 'items'):
-                    r, m = Cursor._flatten_dict(element, prefix, path, allow_arrays=False)
+                    r = Cursor._flatten_dict(element, [], separator, prefix, path, allow_arrays=False)
                     for k, v in r.items():
                         if k not in result:
                             result[k] = [None] * len(arr)
                         result[k][i] = v
-                    mapping.update(m)
                 elif hasattr(element, '__iter__') and not isinstance(element, str):
                     raise NestingLevelTooHigh()
                 else:
                     if prefix not in result:
                         result[prefix] = [None] * len(arr)
                     result[prefix][i] = element
-                    mapping[prefix] = '&'.join(['%s=%s' % x for x in path])
         except NestingLevelTooHigh:
             result[prefix + '_json'] = ujson.dumps(arr)
-            mapping[prefix + '_json'] = '&'.join(['%s=%s' % x for x in path[:-1] + [(path[-1][0], 'json')]])
 
-        return result, mapping
+        return result
 
     @staticmethod
-    def _flatten_dict(doc, prefix='', path=[], allow_arrays=True):
+    def _flatten_dict(doc, only_fields = [], separator='_', prefix='', path=[], allow_arrays=True):
         result = {}
-        mapping = {}
 
         if prefix != '':
-            prefix += '_'
+            prefix += separator
 
         for k, v in doc.items():
+            if len(only_fields) > 0 and k not in only_fields:
+                result[k] = v
+                continue
             if v is None or (hasattr(v, '__len__') and len(v) == 0):
                 continue
             if hasattr(v, 'items'):
-                r, m = Cursor._flatten_dict(v, prefix + k, path + [(k, 'dict')])
+                r = Cursor._flatten_dict(v, [], separator, prefix + k, path + [(k, 'dict')])
                 result.update(r)
-                mapping.update(m)
             elif hasattr(v, '__iter__') and not isinstance(v, str):
                 if allow_arrays:
-                    r, m = Cursor._flatten_array(v, prefix + k, path + [(k, 'array')])
+                    r = Cursor._flatten_array(v, separator, prefix + k, path + [(k, 'array')])
                     result.update(r)
-                    mapping.update(m)
                 else:
                     raise NestingLevelTooHigh()
             else:
                 result[prefix + k] = v
-                mapping[prefix + k] = '&'.join(['%s=%s' % x for x in path + [(k, 'scalar')]])
 
-        return result, mapping
+        return result
 
-    def _ensure_schema(self, table, fields, types, commentmap=None, usebuffertable=None):
+    def _ensure_schema(self, table, fields, types):
         tries = 0
         message = ''
-        dropped = False
         while tries < 5:
             try:
                 table_fields, table_types = self.get_schema(table)
                 table_schema = dict(zip(table_fields, table_types))
-                # if usebuffertable is not None:
-                #     buffer_fields, buffer_types = self.get_schema(table + '_Buffer')
-                #     buffer_schema = dict(zip(buffer_fields, buffer_types))
                 ddled = False
                 new_types = []
                 for doc_field, doc_type in zip(fields, types):
-                    # if usebuffertable is not None and \
-                    #         (doc_field not in buffer_schema or buffer_schema[doc_field] != doc_type) and \
-                    #         not dropped:
-                    #     self.ddl('drop table if exists %s_Buffer' % table)
-                    #     dropped = True
-                    #     # it will be re-created in the store_documents
-
                     if doc_field not in table_schema:
                         logging.info('Extending %s with %s %s' % (table, doc_field, doc_type))
                         self.ddl('alter table %s add column %s %s' % (table, doc_field, doc_type))
-                        if commentmap and doc_field in commentmap:
-                            self.ddl(
-                                "alter table %s comment column %s '%s'" % (table, doc_field, commentmap[doc_field]))
                         ddled = True
                         new_types.append(doc_type)
                     elif doc_field in table_schema and table_schema[doc_field] != doc_type:
@@ -320,9 +301,6 @@ class Cursor(object):
                         if new_type != table_schema[doc_field]:
                             logging.info('Modifying %s with %s %s' % (table, doc_field, new_type))
                             self.ddl('alter table %s modify column %s %s' % (table, doc_field, new_type))
-                            if commentmap and doc_field in commentmap:
-                                self.ddl(
-                                    "alter table %s comment column %s '%s'" % (table, doc_field, commentmap[doc_field]))
                             ddled = True
                         new_types.append(new_type)
                     else:
@@ -340,27 +318,20 @@ class Cursor(object):
 
     def store_documents(self, table, documents,
                         nullablelambda=lambda fieldname: False,
-                        usebuffertable=None,
                         extendtable=True):
         """Store dictionaries or objects into table, optionally extending the table schema if needed. If the type of 
         some value in the documents contradicts with the existing column type in clickhouse, it either will be 
-        converted to String to accomodate all possible values, if extendtable is True, or the value of an 
-        incompatible type will be omitted. If usebuffertable is passed (a string with the Buffer engine 
-        definition), a new buffer table will be created if not exists, and used if possible. The buffer table will 
-        be dropped and recreated, if new columns have to be added to the underlying table."""
-        fields, flattened, types = self.prepare_document_table(table, documents, nullablelambda, usebuffertable,
-                                                               extendtable)
-
-        # creating buffers on the fly can crash clickhouse
-        # if usebuffertable is not None:
-        #     self.ddl("""
-        #     CREATE TABLE IF NOT EXISTS %s_Buffer AS %s
-        #     ENGINE = %s""" % (table, table, usebuffertable))
+        converted to String or to Variant depending on formatter setting, if extendtable is True,
+        or the value of an incompatible type will be omitted.
+        The previous versions of this method supported automatic creation of a buffer table. The
+        support is deprecated, because it could crash clickhouse server.
+        """
+        fields, types = self.prepare_document_table(table, documents, nullablelambda, extendtable)
 
         tries = 0
         while tries < 5:
             try:
-                self.bulkinsert(table if usebuffertable is None else table + '_Buffer', flattened, fields, types)
+                self.bulkinsert(table, documents, fields, types)
                 return
             except Exception as e:
                 if (hasattr(e, 'message') and 'bad version' in e.message) or 'bad version' in str(
@@ -370,7 +341,7 @@ class Cursor(object):
                     raise
 
     def store_only_changed_documents(self, table, documents, primary_keys, datetimefield, ignore_fields=None,
-                                     where='1=1', nullablelambda=lambda fieldname: False, usebuffertable=None):
+                                     where='1=1', nullablelambda=lambda fieldname: False):
         """
         Compares "documents" in the "table" with the latest data retrieved from the table, using grouping by the
         "primary_keys" (list of field names) and getting argMax values sorted by "datetimefield". Compares the 
@@ -381,8 +352,7 @@ class Cursor(object):
         Use this method only for really small tables.
         """
 
-        table_fields, documents, table_types = self.prepare_document_table(table, documents, nullablelambda,
-                                                                           usebuffertable=usebuffertable)
+        table_fields, table_types = self.prepare_document_table(table, documents, nullablelambda)
 
         if ignore_fields is None:
             ignore_fields = list()
@@ -431,14 +401,13 @@ class Cursor(object):
                     break
 
         if len(changed_documents) > 0:
-            self.bulkinsert(table if usebuffertable is None else table + '_Buffer', changed_documents, table_fields,
-                            table_types)
+            self.bulkinsert(table, changed_documents, table_fields, table_types)
 
         return len(changed_documents)
 
-    def _generalize_document_types(self, flattened, nullablelambda=lambda fieldname: False):
+    def _generalize_document_types(self, documents, nullablelambda=lambda fieldname: False):
         doc_schema = {}
-        for doc in flattened:
+        for doc in documents:
             doc_fields, doc_types = self.formatter.get_schema(doc, nullablelambda)
             for f, t in zip(doc_fields, doc_types):
                 if f not in doc_schema:
@@ -449,23 +418,19 @@ class Cursor(object):
         types = [doc_schema[f] for f in fields]
         return fields, types
 
-    def _flatten_documents(self, documents):
-        commentmap = {}
-        if self.formatter.enable_map_datatype:
-            return commentmap, documents
+    @staticmethod
+    def flatten_documents(documents, only_fields = [], separator='_'):
         flattened = []
         for doc in documents:
-            f, m = Cursor._flatten_dict(doc)
-            commentmap.update(m)
+            f = Cursor._flatten_dict(doc, only_fields, separator)
             flattened.append(f)
-        return commentmap, flattened
+        return flattened
 
     def would_change_schema(self, table, documents, nullablelambda=lambda fieldname: False):
         """Whether a subsequent call to prepare_document_table or store_documents would need
         to change table schema to accomondate the documents."""
 
-        commentmap, flattened = self._flatten_documents(documents)
-        fields, types = self._generalize_document_types(flattened, nullablelambda)
+        fields, types = self._generalize_document_types(documents, nullablelambda)
 
         table_fields, table_types = self.get_schema(table)
         table_schema = dict(zip(table_fields, table_types))
@@ -477,83 +442,20 @@ class Cursor(object):
 
     def prepare_document_table(self, table, documents, 
                                nullablelambda=lambda fieldname: False, 
-                               usebuffertable=None,
                                extendtable=True):
-        commentmap, flattened = self._flatten_documents(documents)
         if extendtable:
-            fields, types = self._generalize_document_types(flattened, nullablelambda)
-            fields, types = self._ensure_schema(table, fields, types, commentmap, usebuffertable)
+            fields, types = self._generalize_document_types(documents, nullablelambda)
+            fields, types = self._ensure_schema(table, fields, types)
         else:
             fields, types = self.get_schema(table)
             table_schema = dict(zip(fields, types))
-            for doc in flattened:
+            for doc in documents:
                 doc_fields, doc_types = self.formatter.get_schema(doc, nullablelambda)
                 for f, t in list(zip(doc_fields, doc_types)):
                     if f not in table_schema or not self.formatter.is_compatible_type(table_schema[f], t):
                         del doc[f]
 
-        return fields, flattened, types
-
-    @staticmethod
-    def _set_on_path(target, path, val):
-        if len(path) == 0:
-            raise Exception('Unexpected logical condition with path %s' % path)
-        part_key, part_type = path[0].split('=')
-        if part_type == 'dict':
-            if part_key not in target:
-                target[part_key] = {}
-            Cursor._set_on_path(target[part_key], path[1:], val)
-        elif part_type == 'array':
-            if len(path) == 1:  # last one, means scalars
-                target[part_key] = val
-            else:
-                if part_key not in target:
-                    target[part_key] = [None] * len(val)
-                for i, v in enumerate(val):
-                    if i >= len(target[part_key]):
-                        raise Exception('Arrays of unequal size, %s' % path)
-                    if target[part_key][i] is None:
-                        target[part_key][i] = dict()
-                    Cursor._set_on_path(target[part_key][i], path[1:], v)
-        elif part_type == 'json' and val is not None:
-            target[part_key] = ujson.loads(val)
-        elif val is not None:
-            target[part_key] = val
-
-    @staticmethod
-    def _unflatten_dict(val, mapping):
-        unflattened = {}
-        for k, v in val.items():
-            if k in mapping:
-                path = mapping[k].split('&')
-                Cursor._set_on_path(unflattened, path, v)
-            else:
-                unflattened[k] = v
-        return unflattened
-
-    def retrieve_documents(self, query, table_names):
-        self.select(query)
-        rows = self.fetchall()
-
-        if len(rows) == 0:
-            return []
-
-        self.select("""
-        select name, any(comment) _comment, uniq(comment) un
-        from system.columns
-        where name in (%s) and length(comment) > 0 %s 
-        group by name
-        """ % (
-            ','.join(["'%s'" % x for x in rows[0].keys()]),
-            ('and table in (%s)' % ','.join(["'%s'" % x for x in table_names]))
-        ))
-        mapping = {}
-        for map in self.fetchall():
-            if map['un'] > 1:
-                raise Exception('Cannot find a unique mapping for %s' % map['name'])
-            mapping[map['name']] = map['_comment']
-
-        return [Cursor._unflatten_dict(row, mapping) for row in rows]
+        return fields, types
 
     def change_and_duplicate(self, table, where, modifiers):
         """

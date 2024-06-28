@@ -107,8 +107,8 @@ class ObjectAdapter(object):
 
 class TabSeparatedWithNamesAndTypesFormatter(object):
     def __init__(self):
-        self.enable_map_datatype = False
         self.use_variant_for_generalization = False
+        self.adapter = DictionaryAdapter()
 
     def generalize_type(self, existing_type, new_type):
         arr = 'Array('
@@ -256,12 +256,9 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
         elif isinstance(pythonobj, dt.date):
             result = 'Date'
         elif isinstance(pythonobj, dict):
-            if self.enable_map_datatype:
-                return 'Map(%s, %s)' % (self.clickhousetypefrompython(list(pythonobj.keys())[0],'', nullablelambda),
-                                       self.clickhousetypefrompython(list(pythonobj.values())[0], '', nullablelambda),
-                                       )
-            else:
-                result = 'String' # Actually JSON
+            return 'Map(%s, %s)' % (self.clickhousetypefrompython(list(pythonobj.keys())[0],'', nullablelambda),
+                                   self.clickhousetypefrompython(list(pythonobj.values())[0], '', nullablelambda),
+                                   )
         elif hasattr(pythonobj, '__iter__') and not isinstance(pythonobj, str):
             possibletypes = set()
             for x in pythonobj:
@@ -286,13 +283,8 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
 
 
     def get_schema(self, doc, nullablelambda=lambda fieldname: False):
-        if isinstance(doc, dict):
-            adapter = DictionaryAdapter()
-        else:
-            adapter = ObjectAdapter()
-
-        fields = adapter.getfields(doc)
-        types = [self.clickhousetypefrompython(adapter.getval(doc, f), f, nullablelambda) for f in fields]
+        fields = self.adapter.getfields(doc)
+        types = [self.clickhousetypefrompython(self.adapter.getval(doc, f), f, nullablelambda) for f in fields]
 
         return fields, types
 
@@ -312,15 +304,11 @@ class TabSeparatedWithNamesAndTypesFormatter(object):
         if sys.version_info[0] == 2:
             fields = [x.encode('utf8') for x in fields]
 
-        if isinstance(rows[0], dict):
-            adapter = DictionaryAdapter()
-        else:
-            adapter = ObjectAdapter()
-
         return fields, types, '%s\n%s\n%s' % (
             '\t'.join(fields),
             '\t'.join(types),
-            '\n'.join(['\t'.join([self.formatfield(adapter.getval(r, f), t, f) for f, t in zip(fields, types)]) for r in rows])
+            '\n'.join(['\t'.join([self.formatfield(self.adapter.getval(r, f), t, f) for f, t in zip(fields,
+                                                                                                    types)]) for r in rows])
         )
 
     def formatfield(self, value, type, name, inarray = False):

@@ -9,10 +9,6 @@ class TestMap(unittest.TestCase):
     def test_formatter(self):
         from pyclickhouse.Cursor import TabSeparatedWithNamesAndTypesFormatter
         formatter = TabSeparatedWithNamesAndTypesFormatter()
-        formatter.enable_map_datatype = False
-        r = formatter.clickhousetypefrompython({'abc': 555, 'nope': -1}, 'values')
-        assert r == 'String'
-        formatter.enable_map_datatype = True
         r = formatter.clickhousetypefrompython({'abc': 555, 'nope': -1}, 'values')
         assert r == 'Map(String, Int64)'
         r = formatter.clickhousetypefrompython({'ts': datetime.datetime.now()}, 'values')
@@ -22,7 +18,6 @@ class TestMap(unittest.TestCase):
         conn = Connection('localhost:8124')
         conn.open()
         cur = conn.cursor()
-        cur.formatter.enable_map_datatype = True
 
         cur.ddl('drop table if exists moo')
         cur.ddl('create table moo(valuemap Map(String,Float64)) Engine=Log')
