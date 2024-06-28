@@ -45,6 +45,7 @@ class Cursor(object):
         self.formatter = TabSeparatedWithNamesAndTypesFormatter()
         self.rowindex = -1
         self.cache = FilterableCache()
+        self.max_nesting_level = 2
 
 
     @staticmethod
@@ -229,16 +230,14 @@ class Cursor(object):
         result = self.fetchall()
         return ([x['name'] for x in result], [x['type'] for x in result])
 
-    @staticmethod
-    def _flatten_array(arr, separator, prefix='', path=[]):
+    def _flatten_array(self, arr, separator, prefix='', path=[], nesting_level=0):
         result = {}
-
         try:
             for i, element in enumerate(arr):
                 if element is None or (hasattr(element, '__len__') and len(element) == 0):
                     continue
                 if hasattr(element, 'items'):
-                    r = Cursor._flatten_dict(element, [], separator, prefix, path, allow_arrays=False)
+                    r = self._flatten_dict(element, [], separator, prefix, path, nesting_level+1)
                     for k, v in r.items():
                         if k not in result:
                             result[k] = [None] * len(arr)
@@ -250,12 +249,14 @@ class Cursor(object):
                         result[prefix] = [None] * len(arr)
                     result[prefix][i] = element
         except NestingLevelTooHigh:
-            result[prefix + '_json'] = ujson.dumps(arr)
+            if nesting_level > 0:
+                raise
+            else:
+                result[prefix + '_json'] = ujson.dumps(arr)
 
         return result
 
-    @staticmethod
-    def _flatten_dict(doc, only_fields = [], separator='_', prefix='', path=[], allow_arrays=True):
+    def _flatten_dict(self, doc, only_fields = [], separator='_', prefix='', path=[], nesting_level = 0):
         result = {}
 
         if prefix != '':
@@ -268,11 +269,11 @@ class Cursor(object):
             if v is None or (hasattr(v, '__len__') and len(v) == 0):
                 continue
             if hasattr(v, 'items'):
-                r = Cursor._flatten_dict(v, [], separator, prefix + k, path + [(k, 'dict')])
+                r = self._flatten_dict(v, [], separator, prefix + k, path + [(k, 'dict')], nesting_level)
                 result.update(r)
             elif hasattr(v, '__iter__') and not isinstance(v, str):
-                if allow_arrays:
-                    r = Cursor._flatten_array(v, separator, prefix + k, path + [(k, 'array')])
+                if nesting_level <= self.max_nesting_level:
+                    r = self._flatten_array(v, separator, prefix + k, path + [(k, 'array')], nesting_level)
                     result.update(r)
                 else:
                     raise NestingLevelTooHigh()
@@ -418,11 +419,10 @@ class Cursor(object):
         types = [doc_schema[f] for f in fields]
         return fields, types
 
-    @staticmethod
-    def flatten_documents(documents, only_fields = [], separator='_'):
+    def flatten_documents(self, documents, only_fields = [], separator='_'):
         flattened = []
         for doc in documents:
-            f = Cursor._flatten_dict(doc, only_fields, separator)
+            f = self._flatten_dict(doc, only_fields, separator)
             flattened.append(f)
         return flattened
 

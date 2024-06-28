@@ -73,11 +73,13 @@ class TestNewUnitTests(unittest.TestCase):
         self.cursor.ddl('drop table if exists docs')
         self.cursor.ddl('create table if not exists docs (historydate Date, id Int64) Engine=MergeTree '
                         'order by id partition by toYYYYMM(historydate)')
+        self.cursor.max_nesting_level=0
         docs = self.cursor.flatten_documents([doc])
         self.cursor.store_documents('docs', docs)
         self.cursor.select('select * from docs')
         r = self.cursor.fetchone()
         assert 'Images_json' in r
+        self.cursor.max_nesting_level = 2
 
 
     def test_new_flattening(self):
@@ -97,35 +99,40 @@ class TestNewUnitTests(unittest.TestCase):
 
     def test_dict_flattening(self):
         doc = {'id': 3}
-        bulk = pyclickhouse.Cursor._flatten_dict(doc)
+        bulk = self.cursor._flatten_dict(doc)
         assert bulk == doc
 
         doc = {'id': 3, 'sub': {'dict': True}}
-        bulk = pyclickhouse.Cursor._flatten_dict(doc)
+        bulk = self.cursor._flatten_dict(doc)
         assert bulk == {'id': 3, 'sub_dict': True}
 
         doc = {'id': 3, 'sub': {'dict': True, 'sub_sub': {'a': 1}}}
-        bulk = pyclickhouse.Cursor._flatten_dict(doc)
+        bulk = self.cursor._flatten_dict(doc)
         assert bulk == {'id': 3, 'sub_dict': True, 'sub_sub_sub_a': 1}
 
         doc = {'id': 3, 'sub': ['array', 'abc']}
-        bulk = pyclickhouse.Cursor._flatten_dict(doc)
+        bulk = self.cursor._flatten_dict(doc)
         assert bulk == doc
 
         doc = {'id': 3, 'sub': [{'dict': 'in_array'}, {'dict': 'in_array_also', 'otherkey': True}]}
-        bulk = pyclickhouse.Cursor._flatten_dict(doc)
+        bulk = self.cursor._flatten_dict(doc)
         assert bulk == {'id': 3, 'sub_dict': ['in_array', 'in_array_also'], 'sub_otherkey': [None, True]}
 
         doc = {'id': 3, 'sub': {'array': ['in_dict', 'second']}}
-        bulk = pyclickhouse.Cursor._flatten_dict(doc)
+        bulk = self.cursor._flatten_dict(doc)
         assert bulk == {'id': 3, 'sub_array': ['in_dict', 'second']}
 
-        doc = {'id': 3, 'sub': [{'dict': 'in_array', 'needs': ['json', 'too_much_nesting']}]}
-        bulk = pyclickhouse.Cursor._flatten_dict(doc)
+        doc = {'id': 3, 'sub': [
+            {'dict': 'in_array',
+             'needs': [
+                 {'one_level_more': [{
+                     'and_more': ['json', 'too_much_nesting']
+                 }]}]}]}
+        bulk = self.cursor._flatten_dict(doc)
         assert bulk['id'] == 3
         sub = json.loads(bulk['sub_json'])[0]
-        assert sub['dict'] == 'in_array'
-        assert sub['needs'] == ['json','too_much_nesting']
+        self.assertEqual(sub['dict'], 'in_array')
+        self.assertEqual(sub['needs'], [{'one_level_more': [{'and_more': ['json', 'too_much_nesting']}]}])
 
 
     def test_type_generalization(self):
@@ -265,6 +272,15 @@ class TestNewUnitTests(unittest.TestCase):
         formatter = TabSeparatedWithNamesAndTypesFormatter()
         r = formatter.unformatfield('2023-01-01 01:02:03.123456789', 'DateTime64(9)')
         assert r == dt.datetime(2023,1,1,1,2,3,123456)
+
+    def test_array_in_nested(self):
+        data = [{'id': 1, 'sub': [
+            {'someid':1000, 'props': [1,2,3]},
+            {'someid':1001, 'props': [3,2,1]}
+        ]}]
+        data = self.cursor.flatten_documents(data, separator='.')
+        self.assertEqual(data[0]['sub.someid'], [1000,1001])
+        self.assertEqual(data[0]['sub.props'], [[1,2,3],[3,2,1]])
 
 if __name__ == '__main__':
     unittest.main(__name__)
